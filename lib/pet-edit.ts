@@ -48,6 +48,22 @@ export async function getTutorPetById(profileId: string, petId: string) {
         file_url,
         is_cover,
         sort_order
+      ),
+      lost_reports (
+        id,
+        status,
+        lost_at,
+        last_seen_text,
+        lat,
+        lng,
+        radius_km,
+        reward_text,
+        circumstances,
+        public_contact_instructions,
+        poster_image_url,
+        closed_at,
+        created_at,
+        updated_at
       )
     `)
     .eq('id', petId)

@@ -11,6 +11,23 @@ type Photo = {
   sort_order: number
 }
 
+type LostReport = {
+  id: string
+  status: string | null
+  lost_at: string | null
+  last_seen_text: string | null
+  lat: number | null
+  lng: number | null
+  radius_km: number | null
+  reward_text: string | null
+  circumstances: string | null
+  public_contact_instructions: string | null
+  poster_image_url: string | null
+  closed_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 type PetData = {
   id: string
   name: string
@@ -25,58 +42,63 @@ type PetData = {
   medical_alerts: string | null
   status: string | null
   profile_photo_url: string | null
-  pet_public_settings?: {
-    pet_id: string
-    show_pet_name: boolean
-    show_profile_photo: boolean
-    show_species: boolean
-    show_breed: boolean
-    show_sex: boolean
-    show_age: boolean
-    show_microchip: boolean
-    show_medical_alerts: boolean
-    show_primary_tutor_phone: boolean
-    show_whatsapp_button: boolean
-    show_emergency_contacts: boolean
-    show_last_seen_info_when_lost: boolean
-    show_map_when_lost: boolean
-  }[] | {
-    pet_id: string
-    show_pet_name: boolean
-    show_profile_photo: boolean
-    show_species: boolean
-    show_breed: boolean
-    show_sex: boolean
-    show_age: boolean
-    show_microchip: boolean
-    show_medical_alerts: boolean
-    show_primary_tutor_phone: boolean
-    show_whatsapp_button: boolean
-    show_emergency_contacts: boolean
-    show_last_seen_info_when_lost: boolean
-    show_map_when_lost: boolean
-  } | null
-  pet_onboarding_vet_interest?: {
-    id: string
-    clinic_name: string | null
-    phone: string | null
-    state: string | null
-    municipality: string | null
-  }[] | {
-    id: string
-    clinic_name: string | null
-    phone: string | null
-    state: string | null
-    municipality: string | null
-  } | null
+  pet_public_settings?:
+    | {
+        pet_id: string
+        show_pet_name: boolean
+        show_profile_photo: boolean
+        show_species: boolean
+        show_breed: boolean
+        show_sex: boolean
+        show_age: boolean
+        show_microchip: boolean
+        show_medical_alerts: boolean
+        show_primary_tutor_phone: boolean
+        show_whatsapp_button: boolean
+        show_emergency_contacts: boolean
+        show_last_seen_info_when_lost: boolean
+        show_map_when_lost: boolean
+      }[]
+    | {
+        pet_id: string
+        show_pet_name: boolean
+        show_profile_photo: boolean
+        show_species: boolean
+        show_breed: boolean
+        show_sex: boolean
+        show_age: boolean
+        show_microchip: boolean
+        show_medical_alerts: boolean
+        show_primary_tutor_phone: boolean
+        show_whatsapp_button: boolean
+        show_emergency_contacts: boolean
+        show_last_seen_info_when_lost: boolean
+        show_map_when_lost: boolean
+      }
+    | null
+  pet_onboarding_vet_interest?:
+    | {
+        id: string
+        clinic_name: string | null
+        phone: string | null
+        state: string | null
+        municipality: string | null
+      }[]
+    | {
+        id: string
+        clinic_name: string | null
+        phone: string | null
+        state: string | null
+        municipality: string | null
+      }
+    | null
   pet_photos?: Photo[]
+  lost_reports?: LostReport[]
 }
 
 export default function EditPetForm({ pet }: { pet: PetData }) {
-    const router = useRouter()
-    const supabase = createClient()
-    
-    const [profileId, setProfileId] = useState<string | null>(null)
+  const router = useRouter()
+  const supabase = createClient()
 
   const settings = Array.isArray(pet.pet_public_settings)
     ? pet.pet_public_settings[0]
@@ -90,6 +112,10 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     (a, b) => a.sort_order - b.sort_order
   )
 
+  const activeLostReport =
+    (pet.lost_reports || []).find((report) => report.status === 'active') || null
+
+  const [profileId, setProfileId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
@@ -100,35 +126,73 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
   const [sex, setSex] = useState(pet.sex || '')
   const [color, setColor] = useState(pet.color || '')
   const [birthDate, setBirthDate] = useState(pet.birth_date || '')
-  const [microchipNumber, setMicrochipNumber] = useState(pet.microchip_number || '')
+  const [microchipNumber, setMicrochipNumber] = useState(
+    pet.microchip_number || ''
+  )
   const [medicalAlerts, setMedicalAlerts] = useState(pet.medical_alerts || '')
 
   const [clinicName, setClinicName] = useState(vet?.clinic_name || '')
   const [vetPhone, setVetPhone] = useState(vet?.phone || '')
   const [vetState, setVetState] = useState(vet?.state || '')
-  const [vetMunicipality, setVetMunicipality] = useState(vet?.municipality || '')
+  const [vetMunicipality, setVetMunicipality] = useState(
+    vet?.municipality || ''
+  )
 
-  const [showPetName, setShowPetName] = useState(settings?.show_pet_name ?? true)
-  const [showProfilePhoto, setShowProfilePhoto] = useState(settings?.show_profile_photo ?? true)
-  const [showSpecies, setShowSpecies] = useState(settings?.show_species ?? true)
+  const [showPetName, setShowPetName] = useState(
+    settings?.show_pet_name ?? true
+  )
+  const [showProfilePhoto, setShowProfilePhoto] = useState(
+    settings?.show_profile_photo ?? true
+  )
+  const [showSpecies, setShowSpecies] = useState(
+    settings?.show_species ?? true
+  )
   const [showBreed, setShowBreed] = useState(settings?.show_breed ?? true)
   const [showSex, setShowSex] = useState(settings?.show_sex ?? true)
   const [showAge, setShowAge] = useState(settings?.show_age ?? true)
-  const [showMicrochip, setShowMicrochip] = useState(settings?.show_microchip ?? true)
-  const [showMedicalAlerts, setShowMedicalAlerts] = useState(settings?.show_medical_alerts ?? true)
-  const [showPrimaryTutorPhone, setShowPrimaryTutorPhone] = useState(settings?.show_primary_tutor_phone ?? true)
-  const [showWhatsappButton, setShowWhatsappButton] = useState(settings?.show_whatsapp_button ?? true)
+  const [showMicrochip, setShowMicrochip] = useState(
+    settings?.show_microchip ?? true
+  )
+  const [showMedicalAlerts, setShowMedicalAlerts] = useState(
+    settings?.show_medical_alerts ?? true
+  )
+  const [showPrimaryTutorPhone, setShowPrimaryTutorPhone] = useState(
+    settings?.show_primary_tutor_phone ?? true
+  )
+  const [showWhatsappButton, setShowWhatsappButton] = useState(
+    settings?.show_whatsapp_button ?? true
+  )
 
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
+
+  const [isLostMode, setIsLostMode] = useState(
+    pet.status === 'lost' || !!activeLostReport
+  )
+  const [lostAt, setLostAt] = useState(
+    activeLostReport?.lost_at ? toDatetimeLocal(activeLostReport.lost_at) : ''
+  )
+  const [lastSeenText, setLastSeenText] = useState(
+    activeLostReport?.last_seen_text || ''
+  )
+  const [rewardText, setRewardText] = useState(
+    activeLostReport?.reward_text || ''
+  )
+  const [circumstances, setCircumstances] = useState(
+    activeLostReport?.circumstances || ''
+  )
+  const [publicContactInstructions, setPublicContactInstructions] = useState(
+    activeLostReport?.public_contact_instructions || ''
+  )
+
   useEffect(() => {
     const loadUser = async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser()
-  
+
       setProfileId(user?.id || null)
     }
-  
+
     loadUser()
   }, [supabase])
 
@@ -136,6 +200,9 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     e.preventDefault()
     setSaving(true)
     setMessage('')
+
+    const coverUrl =
+      photos.find((photo) => photo.is_cover)?.file_url || photos[0]?.file_url || null
 
     const { error: petError } = await supabase
       .from('pets')
@@ -148,10 +215,8 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
         birth_date: birthDate || null,
         microchip_number: microchipNumber || null,
         medical_alerts: medicalAlerts || null,
-        profile_photo_url:
-          photos.find((photo) => photo.is_cover)?.file_url ||
-          photos[0]?.file_url ||
-          null,
+        profile_photo_url: coverUrl,
+        status: isLostMode ? 'lost' : 'active',
       })
       .eq('id', pet.id)
 
@@ -217,6 +282,75 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
       }
     }
 
+    if (isLostMode) {
+      if (!profileId) {
+        setMessage('No se pudo identificar al usuario actual.')
+        setSaving(false)
+        return
+      }
+
+      if (activeLostReport?.id) {
+        const { error: lostUpdateError } = await supabase
+          .from('lost_reports')
+          .update({
+            status: 'active',
+            lost_at: lostAt ? new Date(lostAt).toISOString() : null,
+            last_seen_text: lastSeenText || null,
+            reward_text: rewardText || null,
+            circumstances: circumstances || null,
+            public_contact_instructions: publicContactInstructions || null,
+            closed_at: null,
+          })
+          .eq('id', activeLostReport.id)
+
+        if (lostUpdateError) {
+          setMessage(lostUpdateError.message)
+          setSaving(false)
+          return
+        }
+      } else {
+        const { error: lostInsertError } = await supabase
+          .from('lost_reports')
+          .insert({
+            pet_id: pet.id,
+            reported_by_profile_id: profileId,
+            status: 'active',
+            lost_at: lostAt ? new Date(lostAt).toISOString() : new Date().toISOString(),
+            last_seen_text: lastSeenText || null,
+            reward_text: rewardText || null,
+            circumstances: circumstances || null,
+            public_contact_instructions: publicContactInstructions || null,
+          })
+
+        if (lostInsertError) {
+          setMessage(lostInsertError.message)
+          setSaving(false)
+          return
+        }
+      }
+    } else if (activeLostReport?.id) {
+      const { error: lostCloseError } = await supabase
+        .from('lost_reports')
+        .update({
+          status: 'closed',
+          closed_at: new Date().toISOString(),
+        })
+        .eq('id', activeLostReport.id)
+
+      if (lostCloseError) {
+        setMessage(lostCloseError.message)
+        setSaving(false)
+        return
+      }
+    }
+
+    await supabase
+      .from('pets')
+      .update({
+        status: isLostMode ? 'lost' : 'active',
+      })
+      .eq('id', pet.id)
+
     setMessage('Perfil actualizado correctamente.')
     setSaving(false)
     router.refresh()
@@ -229,6 +363,12 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     setMessage('')
 
     try {
+      if (!profileId) {
+        setMessage('No se pudo identificar al usuario actual.')
+        setUploading(false)
+        return
+      }
+
       const uploaded: Photo[] = []
 
       for (let i = 0; i < files.length; i++) {
@@ -250,29 +390,17 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
           .from('pet-photos')
           .getPublicUrl(filePath)
 
-       if (!profileId) {
-  setMessage('No se pudo identificar al usuario actual.')
-  setUploading(false)
-  return
-}
-
-if (!profileId) {
-    setMessage('No se pudo identificar al usuario actual.')
-    setUploading(false)
-    return
-  }
-  
-  const { data: insertedPhoto, error: insertError } = await supabase
-    .from('pet_photos')
-    .insert({
-      pet_id: pet.id,
-      uploaded_by_profile_id: profileId,
-      file_url: publicUrlData.publicUrl,
-      is_cover: photos.length === 0 && i === 0,
-      sort_order: photos.length + i,
-    })
-    .select()
-    .single()
+        const { data: insertedPhoto, error: insertError } = await supabase
+          .from('pet_photos')
+          .insert({
+            pet_id: pet.id,
+            uploaded_by_profile_id: profileId,
+            file_url: publicUrlData.publicUrl,
+            is_cover: photos.length === 0 && i === 0,
+            sort_order: photos.length + i,
+          })
+          .select()
+          .single()
 
         if (insertError) {
           setMessage(insertError.message)
@@ -336,9 +464,6 @@ if (!profileId) {
 
   const deletePhoto = async (photoId: string) => {
     setMessage('')
-
-    const photoToDelete = photos.find((photo) => photo.id === photoId)
-    if (!photoToDelete) return
 
     const { error } = await supabase
       .from('pet_photos')
@@ -484,6 +609,61 @@ if (!profileId) {
         </div>
       </SectionCard>
 
+      <SectionCard title="Modo extraviado">
+        <div className="space-y-4">
+          <Toggle
+            label="Marcar como extraviada"
+            checked={isLostMode}
+            onChange={setIsLostMode}
+          />
+
+          {isLostMode ? (
+            <div className="grid gap-4">
+              <Field label="Fecha y hora del extravío">
+                <input
+                  type="datetime-local"
+                  value={lostAt}
+                  onChange={(e) => setLostAt(e.target.value)}
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none focus:border-neutral-500"
+                />
+              </Field>
+
+              <Field label="Última ubicación conocida">
+                <InputLike value={lastSeenText} onChange={setLastSeenText} />
+              </Field>
+
+              <Field label="Recompensa (opcional)">
+                <InputLike value={rewardText} onChange={setRewardText} />
+              </Field>
+
+              <Field label="Circunstancias del extravío">
+                <textarea
+                  value={circumstances}
+                  onChange={(e) => setCircumstances(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none focus:border-neutral-500"
+                  placeholder="Describe cómo se perdió, señas particulares, collar, comportamiento..."
+                />
+              </Field>
+
+              <Field label="Instrucciones públicas de contacto">
+                <textarea
+                  value={publicContactInstructions}
+                  onChange={(e) => setPublicContactInstructions(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none focus:border-neutral-500"
+                  placeholder="Ej. Por favor llámame de inmediato o escríbeme por WhatsApp."
+                />
+              </Field>
+            </div>
+          ) : (
+            <p className="text-sm text-neutral-600">
+              Cuando actives este modo, la mascota se mostrará como extraviada en el perfil público.
+            </p>
+          )}
+        </div>
+      </SectionCard>
+
       <SectionCard title="Información médica">
         <Field label="Alertas médicas públicas">
           <textarea
@@ -621,4 +801,11 @@ function Toggle({
       />
     </label>
   )
+}
+
+function toDatetimeLocal(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }

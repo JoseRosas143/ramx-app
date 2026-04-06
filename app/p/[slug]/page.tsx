@@ -36,6 +36,15 @@ export default async function PublicPetPage({ params }: PageProps) {
     !!pet.vet_state ||
     !!pet.vet_municipality
 
+  const hasActiveLostReport =
+    !!pet.active_lost_at ||
+    !!pet.active_last_seen_text ||
+    !!pet.active_reward_text ||
+    !!pet.active_circumstances ||
+    !!pet.active_public_contact_instructions
+
+  const isLost = pet.status === 'lost' || hasActiveLostReport
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
       <div className="mx-auto max-w-4xl space-y-5">
@@ -46,32 +55,35 @@ export default async function PublicPetPage({ params }: PageProps) {
         </div>
 
         <section className="overflow-hidden rounded-[30px] border border-white/70 bg-white/90 shadow-2xl backdrop-blur">
-          <div className="6 p-4 pt-5 sm:p-6">
+          <div className="space-y-6 p-4 sm:p-6">
             <PublicPetGallery
               photos={pet.photos || []}
               fallbackUrl={pet.profile_photo_url}
               petName={pet.name || 'Mascota'}
             />
 
-            <div className="space-y-4 text-center">
-              <div className="flex flex-wrap justify-center gap-2">
-                <Badge
-                  variant={pet.status === 'lost' ? 'destructive' : 'secondary'}
-                  className="rounded-full px-4 py-1"
+            <div className="space-y-5 pt-6 text-center">
+              <div className="flex flex-wrap justify-center gap-3">
+                <span
+                  className={`inline-flex items-center rounded-full px-5 py-2.5 text-sm font-semibold shadow-sm ${
+                    isLost
+                      ? 'bg-red-600 text-white'
+                      : 'bg-emerald-100 text-emerald-800'
+                  }`}
                 >
-                  {pet.status === 'lost' ? 'Mascota extraviada' : 'Perfil activo'}
-                </Badge>
+                  {isLost ? 'Mascota extraviada' : 'Perfil activo'}
+                </span>
 
                 {ageText ? (
-                  <Badge className="rounded-full bg-neutral-900 px-4 py-1 text-white hover:bg-neutral-900">
+                  <span className="inline-flex items-center rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm">
                     {ageText}
-                  </Badge>
+                  </span>
                 ) : null}
 
                 {pet.sex ? (
-                  <Badge className="rounded-full bg-amber-100 px-4 py-1 text-amber-900 hover:bg-amber-100">
+                  <span className="inline-flex items-center rounded-full bg-amber-100 px-5 py-2.5 text-sm font-semibold text-amber-900 shadow-sm">
                     {pet.sex}
-                  </Badge>
+                  </span>
                 ) : null}
               </div>
 
@@ -80,8 +92,9 @@ export default async function PublicPetPage({ params }: PageProps) {
               </h1>
 
               <p className="mx-auto max-w-xl text-sm leading-6 text-neutral-600">
-                Si encontraste a esta mascota, por favor contacta a su tutor.
-                Tu ayuda puede hacer la diferencia para que vuelva a casa.
+                {isLost
+                  ? 'Esta mascota está reportada como extraviada. Si tienes información, por favor contacta a su tutor.'
+                  : 'Si encontraste a esta mascota, por favor contacta a su tutor. Tu ayuda puede hacer la diferencia para que vuelva a casa.'}
               </p>
 
               <div className="grid gap-3 text-left sm:grid-cols-2">
@@ -105,6 +118,59 @@ export default async function PublicPetPage({ params }: PageProps) {
             </div>
           </div>
         </section>
+
+        {isLost ? (
+          <section className="rounded-[28px] border border-red-200 bg-gradient-to-br from-red-50 to-rose-50 p-5 shadow-lg">
+            <h2 className="text-lg font-semibold text-red-900">
+              Reporte de extravío
+            </h2>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {pet.active_lost_at ? (
+                <LostInfoCard
+                  label="Fecha del extravío"
+                  value={formatDateTime(pet.active_lost_at)}
+                />
+              ) : null}
+
+              {pet.active_last_seen_text ? (
+                <LostInfoCard
+                  label="Última ubicación conocida"
+                  value={pet.active_last_seen_text}
+                />
+              ) : null}
+
+              {pet.active_reward_text ? (
+                <LostInfoCard
+                  label="Recompensa"
+                  value={pet.active_reward_text}
+                />
+              ) : null}
+            </div>
+
+            {pet.active_circumstances ? (
+              <div className="mt-4 rounded-2xl border border-red-100 bg-white/80 p-4">
+                <p className="text-xs uppercase tracking-wide text-red-500">
+                  Circunstancias
+                </p>
+                <p className="mt-2 text-sm leading-6 text-red-900">
+                  {pet.active_circumstances}
+                </p>
+              </div>
+            ) : null}
+
+            {pet.active_public_contact_instructions ? (
+              <div className="mt-4 rounded-2xl border border-red-100 bg-white/80 p-4">
+                <p className="text-xs uppercase tracking-wide text-red-500">
+                  Instrucciones
+                </p>
+                <p className="mt-2 text-sm leading-6 text-red-900">
+                  {pet.active_public_contact_instructions}
+                </p>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="grid gap-5 lg:grid-cols-2">
           {showContact ? (
@@ -213,6 +279,15 @@ function VetRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function LostInfoCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-red-100 bg-white/80 p-4 shadow-sm">
+      <p className="text-xs uppercase tracking-wide text-red-500">{label}</p>
+      <p className="mt-2 text-sm font-medium leading-6 text-red-900">{value}</p>
+    </div>
+  )
+}
+
 function getAgeText(birthDate?: string | null) {
   if (!birthDate) return null
 
@@ -246,4 +321,18 @@ function getAgeText(birthDate?: string | null) {
   }
 
   return 'Menos de 1 mes'
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return 'No disponible'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+
+  return date.toLocaleString('es-MX', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
