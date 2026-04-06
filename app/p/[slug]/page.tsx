@@ -96,6 +96,23 @@ export default async function PublicPetPage({ params }: PageProps) {
                   ? 'Esta mascota está reportada como extraviada. Si tienes información, por favor contacta a su tutor.'
                   : 'Si encontraste a esta mascota, por favor contacta a su tutor. Tu ayuda puede hacer la diferencia para que vuelva a casa.'}
               </p>
+              {isLost ? (
+  <div className="flex flex-wrap justify-center gap-3">
+    <a
+      href={`/p/${pet.public_slug}/report?type=sighting`}
+      className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:shadow-md"
+    >
+      La vi
+    </a>
+
+    <a
+      href={`/p/${pet.public_slug}/report?type=found_safe`}
+      className="inline-flex items-center justify-center rounded-2xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:shadow-md"
+    >
+      La encontré y la tengo conmigo
+    </a>
+  </div>
+) : null}
 
               <div className="grid gap-3 text-left sm:grid-cols-2">
                 {pet.show_species ? (
