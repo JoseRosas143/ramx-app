@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTutorPets, getTutorSightings } from '@/lib/dashboard'
 import DashboardPetCard from '@/components/dashboard-pet-card'
 import LogoutButton from './logout-button'
+import { updateSightingStatusAction } from './actions'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -29,6 +30,14 @@ export default async function DashboardPage() {
   const pets = await getTutorPets(user.id)
   const sightings = await getTutorSightings(user.id)
 
+  const visibleSightings = sightings.filter((item: any) => item.status !== 'archived')
+
+  const lostPetsCount = pets.filter(
+    (pet: any) => pet.status === 'lost' || pet.has_active_lost_report
+  ).length
+
+  const activePetsCount = pets.length - lostPetsCount
+
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -44,7 +53,7 @@ export default async function DashboardPage() {
                   Hola, {profile?.full_name || 'Tutor'}
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600 sm:text-base">
-                  Aquí puedes ver tus mascotas y los reportes públicos recibidos.
+                  Aquí puedes ver tus mascotas y gestionar los reportes públicos recibidos.
                 </p>
               </div>
             </div>
@@ -63,15 +72,9 @@ export default async function DashboardPage() {
 
           <div className="mt-6 grid gap-4 sm:grid-cols-4">
             <StatCard label="Mascotas" value={String(pets.length)} />
-            <StatCard
-              label="Activas"
-              value={String(pets.filter((pet) => pet.status !== 'lost').length)}
-            />
-            <StatCard
-              label="Extraviadas"
-              value={String(pets.filter((pet) => pet.status === 'lost').length)}
-            />
-            <StatCard label="Reportes" value={String(sightings.length)} />
+            <StatCard label="Activas" value={String(activePetsCount)} />
+            <StatCard label="Extraviadas" value={String(lostPetsCount)} />
+            <StatCard label="Reportes" value={String(visibleSightings.length)} />
           </div>
         </section>
 
@@ -88,7 +91,7 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="grid gap-5 lg:grid-cols-2">
-              {pets.map((pet) => (
+              {pets.map((pet: any) => (
                 <DashboardPetCard key={pet.id} pet={pet} />
               ))}
             </div>
@@ -96,11 +99,18 @@ export default async function DashboardPage() {
         </section>
 
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
-            Reportes recibidos
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
+                Reportes recibidos
+              </h2>
+              <p className="mt-1 text-sm text-neutral-600">
+                Aquí puedes revisar, resolver o archivar los reportes públicos de tus mascotas.
+              </p>
+            </div>
+          </div>
 
-          {sightings.length === 0 ? (
+          {visibleSightings.length === 0 ? (
             <div className="rounded-[28px] border border-neutral-200 bg-white/95 p-6 shadow-lg">
               <p className="text-sm text-neutral-600">
                 Aún no has recibido reportes públicos.
@@ -108,7 +118,7 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {sightings.map((item: any) => (
+              {visibleSightings.map((item: any) => (
                 <div
                   key={item.id}
                   className="rounded-[24px] border border-neutral-200 bg-white/95 p-5 shadow-lg"
@@ -126,21 +136,43 @@ export default async function DashboardPage() {
                         : 'Avistamiento'}
                     </span>
 
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${getStatusClass(
+                        item.status
+                      )}`}
+                    >
+                      {getStatusLabel(item.status)}
+                    </span>
+
                     <span className="text-sm text-neutral-500">
                       {item.pets?.name || 'Mascota'}
                     </span>
                   </div>
 
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <MiniInfo label="Ubicación" value={item.location_text || 'No disponible'} />
+                    <MiniInfo
+                      label="Ubicación"
+                      value={item.location_text || 'No disponible'}
+                    />
                     <MiniInfo
                       label="Fecha"
-                      value={item.seen_at ? new Date(item.seen_at).toLocaleString('es-MX') : 'No disponible'}
+                      value={
+                        item.seen_at
+                          ? new Date(item.seen_at).toLocaleString('es-MX')
+                          : 'No disponible'
+                      }
                     />
-                    <MiniInfo label="Nombre" value={item.reporter_name || 'No disponible'} />
+                    <MiniInfo
+                      label="Nombre"
+                      value={item.reporter_name || 'No disponible'}
+                    />
                     <MiniInfo
                       label="Teléfono / WhatsApp"
-                      value={item.reporter_whatsapp || item.reporter_phone || 'No disponible'}
+                      value={
+                        item.reporter_whatsapp ||
+                        item.reporter_phone ||
+                        'No disponible'
+                      }
                     />
                   </div>
 
@@ -154,6 +186,67 @@ export default async function DashboardPage() {
                       </p>
                     </div>
                   ) : null}
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {item.reporter_whatsapp ? (
+                      <a
+                        href={buildWhatsappLink(item.reporter_whatsapp, item.pets?.name)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100"
+                      >
+                        Abrir WhatsApp
+                      </a>
+                    ) : null}
+
+                    {item.reporter_phone ? (
+                      <a
+                        href={`tel:${item.reporter_phone}`}
+                        className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+                      >
+                        Llamar
+                      </a>
+                    ) : null}
+
+                    {item.status === 'new' ? (
+                      <form action={updateSightingStatusAction}>
+                        <input type="hidden" name="sightingId" value={item.id} />
+                        <input type="hidden" name="nextStatus" value="reviewed" />
+                        <button
+                          type="submit"
+                          className="inline-flex items-center justify-center rounded-2xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-800 transition hover:bg-sky-100"
+                        >
+                          Marcar revisado
+                        </button>
+                      </form>
+                    ) : null}
+
+                    {item.status !== 'resolved' ? (
+                      <form action={updateSightingStatusAction}>
+                        <input type="hidden" name="sightingId" value={item.id} />
+                        <input type="hidden" name="nextStatus" value="resolved" />
+                        <button
+                          type="submit"
+                          className="inline-flex items-center justify-center rounded-2xl border border-emerald-200 bg-white px-4 py-2 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
+                        >
+                          Marcar resuelto
+                        </button>
+                      </form>
+                    ) : null}
+
+                    {item.status !== 'archived' ? (
+                      <form action={updateSightingStatusAction}>
+                        <input type="hidden" name="sightingId" value={item.id} />
+                        <input type="hidden" name="nextStatus" value="archived" />
+                        <button
+                          type="submit"
+                          className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                        >
+                          Archivar
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
@@ -184,4 +277,40 @@ function MiniInfo({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-medium text-neutral-950">{value}</p>
     </div>
   )
+}
+
+function getStatusLabel(status: string | null) {
+  switch (status) {
+    case 'reviewed':
+      return 'Revisado'
+    case 'resolved':
+      return 'Resuelto'
+    case 'archived':
+      return 'Archivado'
+    case 'new':
+    default:
+      return 'Nuevo'
+  }
+}
+
+function getStatusClass(status: string | null) {
+  switch (status) {
+    case 'reviewed':
+      return 'bg-sky-100 text-sky-800'
+    case 'resolved':
+      return 'bg-emerald-100 text-emerald-800'
+    case 'archived':
+      return 'bg-neutral-200 text-neutral-700'
+    case 'new':
+    default:
+      return 'bg-rose-100 text-rose-800'
+  }
+}
+
+function buildWhatsappLink(phone: string, petName?: string | null) {
+  const cleanPhone = phone.replace(/\D/g, '')
+  const message = encodeURIComponent(
+    `Hola, te contacto por el reporte de ${petName || 'la mascota'} en RAMX.`
+  )
+  return `https://wa.me/${cleanPhone}?text=${message}`
 }

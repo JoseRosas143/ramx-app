@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
+import { markPetRecoveredAction } from '@/app/dashboard/actions'
 
 type Pet = {
   id: string
@@ -13,9 +14,12 @@ type Pet = {
   microchip_number: string | null
   internal_id: string | null
   profile_photo_url: string | null
+  has_active_lost_report?: boolean
 }
 
 export default function DashboardPetCard({ pet }: { pet: Pet }) {
+  const isCurrentlyLost = pet.status === 'lost' || !!pet.has_active_lost_report
+
   return (
     <div className="overflow-hidden rounded-[28px] border border-white/70 bg-white/95 shadow-lg">
       <div className="relative h-44 overflow-hidden bg-gradient-to-br from-amber-100 via-orange-50 to-sky-50">
@@ -34,10 +38,10 @@ export default function DashboardPetCard({ pet }: { pet: Pet }) {
 
         <div className="absolute left-4 top-4">
           <Badge
-            variant={pet.status === 'lost' ? 'destructive' : 'secondary'}
+            variant={isCurrentlyLost ? 'destructive' : 'secondary'}
             className="rounded-full px-3 py-1"
           >
-            {pet.status === 'lost' ? 'Extraviada' : 'Activa'}
+            {isCurrentlyLost ? 'Extraviada' : 'Activa'}
           </Badge>
         </div>
       </div>
@@ -66,6 +70,27 @@ export default function DashboardPetCard({ pet }: { pet: Pet }) {
           />
         </div>
 
+        {isCurrentlyLost ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-medium text-amber-900">
+              Esta mascota sigue marcada como extraviada.
+            </p>
+            <p className="mt-1 text-sm text-amber-800">
+              Si ya volvió a casa, puedes cerrar el caso y ocultar el aviso público.
+            </p>
+
+            <form action={markPetRecoveredAction} className="mt-3">
+              <input type="hidden" name="petId" value={pet.id} />
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-2xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-700"
+              >
+                Marcar como recuperada
+              </button>
+            </form>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-3">
           <Link
             href={`/p/${pet.public_slug}`}
@@ -75,11 +100,11 @@ export default function DashboardPetCard({ pet }: { pet: Pet }) {
           </Link>
 
           <Link
-  href={`/dashboard/pets/${pet.id}/edit`}
-  className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 transition-all duration-200 hover:bg-white hover:shadow-md"
->
-  Editar perfil
-</Link>
+            href={`/dashboard/pets/${pet.id}/edit`}
+            className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-800 transition-all duration-200 hover:bg-white hover:shadow-md"
+          >
+            Editar perfil
+          </Link>
         </div>
       </div>
     </div>
