@@ -96,23 +96,6 @@ export default async function PublicPetPage({ params }: PageProps) {
                   ? 'Esta mascota está reportada como extraviada. Si tienes información, por favor contacta a su tutor.'
                   : 'Si encontraste a esta mascota, por favor contacta a su tutor. Tu ayuda puede hacer la diferencia para que vuelva a casa.'}
               </p>
-              {isLost ? (
-  <div className="flex flex-wrap justify-center gap-3">
-    <a
-      href={`/p/${pet.public_slug}/report?type=sighting`}
-      className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-900 transition hover:shadow-md"
-    >
-      La vi
-    </a>
-
-    <a
-      href={`/p/${pet.public_slug}/report?type=found_safe`}
-      className="inline-flex items-center justify-center rounded-2xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:shadow-md"
-    >
-      La encontré y la tengo conmigo
-    </a>
-  </div>
-) : null}
 
               <div className="grid gap-3 text-left sm:grid-cols-2">
                 {pet.show_species ? (
@@ -137,55 +120,87 @@ export default async function PublicPetPage({ params }: PageProps) {
         </section>
 
         {isLost ? (
-          <section className="rounded-[28px] border border-red-200 bg-gradient-to-br from-red-50 to-rose-50 p-5 shadow-lg">
-            <h2 className="text-lg font-semibold text-red-900">
-              Reporte de extravío
-            </h2>
+          <section className="rounded-[32px] border border-red-200 bg-gradient-to-br from-red-50 via-rose-50 to-white p-5 shadow-lg sm:p-6">
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold tracking-tight text-red-900">
+                  Mascota reportada como extraviada
+                </h2>
+                <p className="text-sm leading-6 text-red-800">
+                  Si tienes información sobre su ubicación o la tienes resguardada, usa una de las siguientes opciones para ayudar a localizarla.
+                </p>
+              </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              {pet.active_lost_at ? (
-                <LostInfoCard
-                  label="Fecha del extravío"
-                  value={formatDateTime(pet.active_lost_at)}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                {pet.active_lost_at ? (
+                  <LostInfoCard
+                    label="Fecha del extravío"
+                    value={formatDateTime(pet.active_lost_at)}
+                  />
+                ) : null}
+
+                {pet.active_last_seen_text ? (
+                  <LostInfoCard
+                    label="Última ubicación conocida"
+                    value={pet.active_last_seen_text}
+                  />
+                ) : null}
+
+                {pet.active_reward_text ? (
+                  <LostInfoCard
+                    label="Recompensa"
+                    value={pet.active_reward_text}
+                  />
+                ) : null}
+              </div>
+
+              {pet.active_circumstances ? (
+                <div className="rounded-3xl border border-red-100 bg-white p-5 shadow-sm">
+                  <h3 className="text-sm font-semibold text-red-900">
+                    Circunstancias del extravío
+                  </h3>
+                  <p className="mt-3 text-sm leading-7 text-red-900">
+                    {pet.active_circumstances}
+                  </p>
+                </div>
               ) : null}
 
-              {pet.active_last_seen_text ? (
-                <LostInfoCard
-                  label="Última ubicación conocida"
-                  value={pet.active_last_seen_text}
-                />
+              {pet.active_public_contact_instructions ? (
+                <div className="rounded-3xl border border-red-100 bg-white p-5 shadow-sm">
+                  <h3 className="text-sm font-semibold text-red-900">
+                    Indicaciones de contacto
+                  </h3>
+                  <p className="mt-3 text-sm leading-7 text-red-900">
+                    {pet.active_public_contact_instructions}
+                  </p>
+                </div>
               ) : null}
 
-              {pet.active_reward_text ? (
-                <LostInfoCard
-                  label="Recompensa"
-                  value={pet.active_reward_text}
-                />
-              ) : null}
+              <div className="rounded-3xl border border-red-100 bg-white/90 p-4 shadow-sm">
+                <p className="text-sm font-medium text-red-900">
+                  ¿La viste o la tienes contigo?
+                </p>
+                <p className="mt-1 text-sm text-red-700">
+                  Elige la opción que mejor describa tu situación.
+                </p>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <a
+                    href={`/p/${pet.public_slug}/report?type=sighting`}
+                    className="inline-flex min-h-[56px] items-center justify-center rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm font-medium text-red-900 transition hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    La vi
+                  </a>
+
+                  <a
+                    href={`/p/${pet.public_slug}/report?type=found_safe`}
+                    className="inline-flex min-h-[56px] items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-md"
+                  >
+                    La encontré y la tengo conmigo
+                  </a>
+                </div>
+              </div>
             </div>
-
-            {pet.active_circumstances ? (
-              <div className="mt-4 rounded-2xl border border-red-100 bg-white/80 p-4">
-                <p className="text-xs uppercase tracking-wide text-red-500">
-                  Circunstancias
-                </p>
-                <p className="mt-2 text-sm leading-6 text-red-900">
-                  {pet.active_circumstances}
-                </p>
-              </div>
-            ) : null}
-
-            {pet.active_public_contact_instructions ? (
-              <div className="mt-4 rounded-2xl border border-red-100 bg-white/80 p-4">
-                <p className="text-xs uppercase tracking-wide text-red-500">
-                  Instrucciones
-                </p>
-                <p className="mt-2 text-sm leading-6 text-red-900">
-                  {pet.active_public_contact_instructions}
-                </p>
-              </div>
-            ) : null}
           </section>
         ) : null}
 
