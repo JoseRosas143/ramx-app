@@ -184,6 +184,18 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     activeLostReport?.public_contact_instructions || ''
   )
 
+  const [lostLat, setLostLat] = useState(
+    activeLostReport?.lat != null ? String(activeLostReport.lat) : ''
+  )
+  const [lostLng, setLostLng] = useState(
+    activeLostReport?.lng != null ? String(activeLostReport.lng) : ''
+  )
+  const [lostRadiusKm, setLostRadiusKm] = useState(
+    activeLostReport?.radius_km != null ? String(activeLostReport.radius_km) : '1'
+  )
+  const [locatingLostPoint, setLocatingLostPoint] = useState(false)
+  const [lostLocationStatus, setLostLocationStatus] = useState('')
+
   useEffect(() => {
     const loadUser = async () => {
       const {
@@ -195,6 +207,53 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
 
     loadUser()
   }, [supabase])
+
+  const handleUseCurrentLostLocation = () => {
+    setLostLocationStatus('')
+
+    if (!navigator.geolocation) {
+      setLostLocationStatus('Tu navegador no soporta geolocalización.')
+      return
+    }
+
+    setLocatingLostPoint(true)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLat = Number(position.coords.latitude.toFixed(6))
+        const nextLng = Number(position.coords.longitude.toFixed(6))
+
+        setLostLat(String(nextLat))
+        setLostLng(String(nextLng))
+
+        if (!lastSeenText.trim()) {
+          setLastSeenText(
+            `Ubicación aproximada del extravío (${nextLat}, ${nextLng})`
+          )
+        }
+
+        setLostLocationStatus('Ubicación base capturada correctamente.')
+        setLocatingLostPoint(false)
+      },
+      () => {
+        setLostLocationStatus(
+          'No se pudo obtener la ubicación. Revisa permisos del navegador o escribe las coordenadas manualmente.'
+        )
+        setLocatingLostPoint(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    )
+  }
+
+  const handleClearLostLocation = () => {
+    setLostLat('')
+    setLostLng('')
+    setLostLocationStatus('Ubicación base eliminada.')
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -289,6 +348,31 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
         return
       }
 
+      if ((lostLat && !lostLng) || (!lostLat && lostLng)) {
+        setMessage('Para usar mapa del extravío, captura latitud y longitud completas.')
+        setSaving(false)
+        return
+      }
+
+      const parsedLostLat = lostLat ? Number(lostLat) : null
+      const parsedLostLng = lostLng ? Number(lostLng) : null
+      const parsedRadiusKm = lostRadiusKm ? Number(lostRadiusKm) : 1
+
+      if (
+        (lostLat && Number.isNaN(parsedLostLat as number)) ||
+        (lostLng && Number.isNaN(parsedLostLng as number))
+      ) {
+        setMessage('Las coordenadas del extravío no son válidas.')
+        setSaving(false)
+        return
+      }
+
+      if (lostRadiusKm && Number.isNaN(parsedRadiusKm)) {
+        setMessage('El radio de búsqueda no es válido.')
+        setSaving(false)
+        return
+      }
+
       if (activeLostReport?.id) {
         const { error: lostUpdateError } = await supabase
           .from('lost_reports')
@@ -296,6 +380,9 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
             status: 'active',
             lost_at: lostAt ? new Date(lostAt).toISOString() : null,
             last_seen_text: lastSeenText || null,
+            lat: parsedLostLat,
+            lng: parsedLostLng,
+            radius_km: parsedRadiusKm || 1,
             reward_text: rewardText || null,
             circumstances: circumstances || null,
             public_contact_instructions: publicContactInstructions || null,
@@ -317,6 +404,9 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
             status: 'active',
             lost_at: lostAt ? new Date(lostAt).toISOString() : new Date().toISOString(),
             last_seen_text: lastSeenText || null,
+            lat: parsedLostLat,
+            lng: parsedLostLng,
+            radius_km: parsedRadiusKm || 1,
             reward_text: rewardText || null,
             circumstances: circumstances || null,
             public_contact_instructions: publicContactInstructions || null,
@@ -631,6 +721,58 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
               <Field label="Última ubicación conocida">
                 <InputLike value={lastSeenText} onChange={setLastSeenText} />
               </Field>
+
+              <div className="rounded-3xl border border-red-100 bg-red-50/60 p-4">
+                <p className="text-sm font-semibold text-red-900">
+                  Ubicación base para mapa
+                </p>
+                <p className="mt-1 text-sm leading-6 text-red-800">
+                  Esta es la ubicación principal desde donde se perdió la mascota. Se usará para centrar el mapa público y dibujar la zona inicial de búsqueda.
+                </p>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleUseCurrentLostLocation}
+                    disabled={locatingLostPoint}
+                    className="inline-flex items-center justify-center rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-900 transition hover:bg-red-100 disabled:opacity-60"
+                  >
+                    {locatingLostPoint ? 'Obteniendo ubicación...' : 'Usar mi ubicación actual'}
+                  </button>
+
+                  {(lostLat || lostLng) ? (
+                    <button
+                      type="button"
+                      onClick={handleClearLostLocation}
+                      className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                    >
+                      Quitar ubicación
+                    </button>
+                  ) : null}
+                </div>
+
+                {lostLocationStatus ? (
+                  <p className="mt-3 text-sm text-red-900">{lostLocationStatus}</p>
+                ) : null}
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                  <Field label="Latitud">
+                    <InputLike value={lostLat} onChange={setLostLat} />
+                  </Field>
+
+                  <Field label="Longitud">
+                    <InputLike value={lostLng} onChange={setLostLng} />
+                  </Field>
+
+                  <Field label="Radio de búsqueda (km)">
+                    <InputLike value={lostRadiusKm} onChange={setLostRadiusKm} />
+                  </Field>
+                </div>
+
+                <p className="mt-3 text-xs leading-5 text-red-700">
+                  Si no guardas latitud y longitud, el mapa público del extravío no podrá mostrarse todavía.
+                </p>
+              </div>
 
               <Field label="Recompensa (opcional)">
                 <InputLike value={rewardText} onChange={setRewardText} />

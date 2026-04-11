@@ -17,8 +17,51 @@ export async function getPublicPetBySlug(slug: string) {
     .eq('pet_id', pet.pet_id)
     .order('sort_order', { ascending: true })
 
+  const { data: activeLostReport } = await supabase
+    .from('lost_reports')
+    .select(`
+      id,
+      status,
+      last_seen_text,
+      reward_text,
+      circumstances,
+      public_contact_instructions,
+      lat,
+      lng,
+      radius_km,
+      created_at,
+      closed_at
+    `)
+    .eq('pet_id', pet.pet_id)
+    .eq('status', 'active')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const { data: sightings } = await supabase
+    .from('sightings')
+    .select(`
+      id,
+      report_type,
+      reporter_name,
+      seen_at,
+      location_text,
+      notes,
+      status,
+      lat,
+      lng,
+      created_at
+    `)
+    .eq('pet_id', pet.pet_id)
+    .neq('status', 'archived')
+    .order('seen_at', { ascending: false })
+
   return {
     ...pet,
     photos: photos || [],
+    active_lost_lat: activeLostReport?.lat ?? null,
+    active_lost_lng: activeLostReport?.lng ?? null,
+    active_radius_km: activeLostReport?.radius_km ?? null,
+    map_sightings: sightings || [],
   }
 }

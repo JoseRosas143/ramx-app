@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { getPublicPetBySlug } from '@/lib/pets'
 import PublicPetGallery from '@/components/public-pet-gallery'
+import LostPetMap from '@/components/maps/lost-pet-map-dynamic'
+import LostPetPoster from '@/components/posters/lost-pet-poster'
 
 type PageProps = {
   params: Promise<{
@@ -44,6 +46,14 @@ export default async function PublicPetPage({ params }: PageProps) {
     !!pet.active_public_contact_instructions
 
   const isLost = pet.status === 'lost' || hasActiveLostReport
+
+  const posterPhotoUrl =
+    pet.profile_photo_url || pet.photos?.[0]?.file_url || null
+
+  const canShowMap =
+    isLost &&
+    typeof pet.active_lost_lat === 'number' &&
+    typeof pet.active_lost_lng === 'number'
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
@@ -202,6 +212,36 @@ export default async function PublicPetPage({ params }: PageProps) {
               </div>
             </div>
           </section>
+        ) : null}
+
+        {canShowMap ? (
+          <LostPetMap
+            centerLat={pet.active_lost_lat}
+            centerLng={pet.active_lost_lng}
+            radiusKm={pet.active_radius_km}
+            petName={pet.name || 'esta mascota'}
+            sightings={pet.map_sightings || []}
+          />
+        ) : null}
+
+        {isLost ? (
+          <LostPetPoster
+          petName={pet.name || 'Mascota'}
+          photoUrl={posterPhotoUrl}
+          species={pet.species}
+          breed={pet.breed}
+          sex={pet.sex}
+          color={pet.color}
+          ageText={ageText}
+          lostAt={pet.active_lost_at}
+          lastSeenText={pet.active_last_seen_text}
+          rewardText={pet.active_reward_text}
+          circumstances={pet.active_circumstances}
+          publicContactInstructions={pet.active_public_contact_instructions}
+          phone={phone || null}
+          whatsappUrl={whatsappUrl}
+          publicSlug={pet.public_slug}
+        />
         ) : null}
 
         <section className="grid gap-5 lg:grid-cols-2">
