@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import 'leaflet/dist/leaflet.css'
 
 export const metadata: Metadata = {
   title: 'RAMX',
-  description: 'Registro Animal MX',
+  description: 'Red de apoyo para mascotas',
 }
 
 export default function RootLayout({
@@ -13,9 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className="min-h-screen bg-neutral-50 text-neutral-900 antialiased">
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   )
 }

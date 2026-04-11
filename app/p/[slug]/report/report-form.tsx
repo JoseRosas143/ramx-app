@@ -6,12 +6,14 @@ import { useRouter } from 'next/navigation'
 
 type Props = {
   petId: string
+  petSlug: string
   petName: string
   reportType: 'sighting' | 'found_safe'
 }
 
 export default function PublicReportForm({
   petId,
+  petSlug,
   petName,
   reportType,
 }: Props) {
@@ -29,6 +31,56 @@ export default function PublicReportForm({
   const [locationText, setLocationText] = useState('')
   const [notes, setNotes] = useState('')
 
+  const [lat, setLat] = useState<number | null>(null)
+  const [lng, setLng] = useState<number | null>(null)
+  const [locating, setLocating] = useState(false)
+  const [locationStatus, setLocationStatus] = useState('')
+
+  const handleUseCurrentLocation = () => {
+    setLocationStatus('')
+
+    if (!navigator.geolocation) {
+      setLocationStatus('Tu navegador no soporta geolocalización.')
+      return
+    }
+
+    setLocating(true)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const nextLat = Number(position.coords.latitude.toFixed(6))
+        const nextLng = Number(position.coords.longitude.toFixed(6))
+
+        setLat(nextLat)
+        setLng(nextLng)
+
+        if (!locationText.trim()) {
+          setLocationText(`Ubicación aproximada capturada por GPS (${nextLat}, ${nextLng})`)
+        }
+
+        setLocationStatus('Ubicación capturada correctamente.')
+        setLocating(false)
+      },
+      () => {
+        setLocationStatus(
+          'No se pudo obtener tu ubicación. Revisa permisos del navegador o escribe la ubicación manualmente.'
+        )
+        setLocating(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    )
+  }
+
+  const clearCapturedLocation = () => {
+    setLat(null)
+    setLng(null)
+    setLocationStatus('Ubicación GPS eliminada.')
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
@@ -41,8 +93,10 @@ export default function PublicReportForm({
       reporter_phone: reporterPhone || null,
       reporter_whatsapp: reporterWhatsapp || null,
       seen_at: seenAt ? new Date(seenAt).toISOString() : new Date().toISOString(),
-      location_text: locationText,
+      location_text: locationText || null,
       notes: notes || null,
+      lat,
+      lng,
       status: 'new',
     })
 
@@ -67,10 +121,13 @@ export default function PublicReportForm({
         </p>
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => {
+            router.push(`/p/${petSlug}`)
+            router.refresh()
+          }}
           className="mt-5 inline-flex rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-medium text-white"
         >
-          Volver
+          Volver al perfil
         </button>
       </section>
     )
@@ -110,6 +167,46 @@ export default function PublicReportForm({
               placeholder="Ej. Parque Juárez, Puebla / Calle 5 de Mayo #123"
             />
           </Field>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+          <p className="text-sm font-medium text-sky-900">
+            Ubicación para mapa
+          </p>
+          <p className="mt-1 text-sm leading-6 text-sky-800">
+            Esto nos ayudará a dibujar mejor la zona de búsqueda y ubicar el reporte en el mapa.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleUseCurrentLocation}
+              disabled={locating}
+              className="inline-flex items-center justify-center rounded-2xl border border-sky-200 bg-white px-4 py-2 text-sm font-medium text-sky-900 transition hover:bg-sky-100 disabled:opacity-60"
+            >
+              {locating ? 'Obteniendo ubicación...' : 'Usar mi ubicación actual'}
+            </button>
+
+            {(lat !== null || lng !== null) ? (
+              <button
+                type="button"
+                onClick={clearCapturedLocation}
+                className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+              >
+                Quitar ubicación GPS
+              </button>
+            ) : null}
+          </div>
+
+          {locationStatus ? (
+            <p className="mt-3 text-sm text-sky-900">{locationStatus}</p>
+          ) : null}
+
+          {(lat !== null && lng !== null) ? (
+            <div className="mt-3 rounded-2xl border border-sky-200 bg-white px-4 py-3 text-sm text-neutral-800">
+              Coordenadas capturadas: {lat}, {lng}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4">

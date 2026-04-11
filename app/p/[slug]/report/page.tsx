@@ -41,6 +41,7 @@ export default async function PublicReportPage({
 
         <PublicReportForm
           petId={pet.pet_id}
+          petSlug={pet.public_slug || slug}
           petName={pet.name || 'esta mascota'}
           reportType={reportType}
         />
