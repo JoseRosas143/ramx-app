@@ -26,6 +26,7 @@ export async function getPublicPetBySlug(slug: string) {
       reward_text,
       circumstances,
       public_contact_instructions,
+      poster_image_url,
       lat,
       lng,
       radius_km,
@@ -59,6 +60,7 @@ export async function getPublicPetBySlug(slug: string) {
   return {
     ...pet,
     photos: photos || [],
+    active_poster_image_url: activeLostReport?.poster_image_url ?? null,
     active_lost_lat: activeLostReport?.lat ?? null,
     active_lost_lng: activeLostReport?.lng ?? null,
     active_radius_km: activeLostReport?.radius_km ?? null,

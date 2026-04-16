@@ -184,6 +184,11 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     activeLostReport?.public_contact_instructions || ''
   )
 
+  const [posterImageUrl, setPosterImageUrl] = useState(
+    activeLostReport?.poster_image_url || ''
+  )
+  const [uploadingPosterImage, setUploadingPosterImage] = useState(false)
+
   const [lostLat, setLostLat] = useState(
     activeLostReport?.lat != null ? String(activeLostReport.lat) : ''
   )
@@ -253,6 +258,47 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     setLostLat('')
     setLostLng('')
     setLostLocationStatus('Ubicación base eliminada.')
+  }
+
+  const handleUploadLostPosterPhoto = async (file: File | null) => {
+    if (!file) return
+  
+    setUploadingPosterImage(true)
+    setMessage('')
+  
+    try {
+      if (!profileId) {
+        setMessage('No se pudo identificar al usuario actual.')
+        setUploadingPosterImage(false)
+        return
+      }
+  
+      const ext = file.name.split('.').pop()
+      const filePath = `${pet.id}/lost-poster-${Date.now()}.${ext}`
+  
+      const { error: uploadError } = await supabase.storage
+        .from('pet-photos')
+        .upload(filePath, file, { upsert: true })
+  
+      if (uploadError) {
+        setMessage(uploadError.message)
+        setUploadingPosterImage(false)
+        return
+      }
+  
+      const { data: publicUrlData } = supabase.storage
+        .from('pet-photos')
+        .getPublicUrl(filePath)
+  
+      setPosterImageUrl(publicUrlData.publicUrl)
+      setMessage('Foto reciente para búsqueda cargada correctamente.')
+    } finally {
+      setUploadingPosterImage(false)
+    }
+  }
+  
+  const clearLostPosterPhoto = () => {
+    setPosterImageUrl('')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -386,6 +432,7 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
             reward_text: rewardText || null,
             circumstances: circumstances || null,
             public_contact_instructions: publicContactInstructions || null,
+            poster_image_url: posterImageUrl || null,
             closed_at: null,
           })
           .eq('id', activeLostReport.id)
@@ -410,6 +457,7 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
             reward_text: rewardText || null,
             circumstances: circumstances || null,
             public_contact_instructions: publicContactInstructions || null,
+            poster_image_url: posterImageUrl || null,
           })
 
         if (lostInsertError) {
@@ -773,6 +821,52 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
                   Si no guardas latitud y longitud, el mapa público del extravío no podrá mostrarse todavía.
                 </p>
               </div>
+              
+              <div className="rounded-3xl border border-red-100 bg-white p-4">
+  <p className="text-sm font-semibold text-red-900">
+    Foto reciente para cartel y búsqueda
+  </p>
+  <p className="mt-1 text-sm leading-6 text-red-800">
+    Usa una foto clara y reciente de cómo se veía tu mascota al momento del extravío.
+    Esta imagen se mostrará en el cartel y en los materiales públicos de búsqueda.
+  </p>
+
+  <div className="mt-4 flex flex-wrap gap-2">
+    <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-900 transition hover:bg-red-50">
+      {uploadingPosterImage ? 'Subiendo foto...' : 'Subir foto reciente'}
+      <input
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) =>
+          handleUploadLostPosterPhoto(e.target.files?.[0] || null)
+        }
+      />
+    </label>
+
+    {posterImageUrl ? (
+      <button
+        type="button"
+        onClick={clearLostPosterPhoto}
+        className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+      >
+        Quitar foto reciente
+      </button>
+    ) : null}
+  </div>
+
+  {posterImageUrl ? (
+    <div className="mt-4 overflow-hidden rounded-3xl border border-neutral-200 bg-neutral-50">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={posterImageUrl}
+        alt="Foto reciente para búsqueda"
+        className="h-64 w-full object-cover"
+      />
+    </div>
+  ) : null}
+</div>
+
 
               <Field label="Recompensa (opcional)">
                 <InputLike value={rewardText} onChange={setRewardText} />

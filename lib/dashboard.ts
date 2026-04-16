@@ -65,6 +65,8 @@ export async function getTutorSightings(profileId: string) {
       location_text,
       notes,
       status,
+      lat,
+      lng,
       created_at,
       pets (
         id,
@@ -73,7 +75,7 @@ export async function getTutorSightings(profileId: string) {
       )
     `)
     .in('pet_id', petIds)
-    .order('created_at', { ascending: false })
+    .order('seen_at', { ascending: false })
 
   if (error) return []
 
