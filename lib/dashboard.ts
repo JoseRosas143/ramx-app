@@ -81,3 +81,34 @@ export async function getTutorSightings(profileId: string) {
 
   return data || []
 }
+
+export async function getTutorNotifications(profileId: string) {
+  const supabase = await createClient()
+
+  const { data, error } = await supabase
+    .from('notifications')
+    .select(`
+      id,
+      recipient_profile_id,
+      pet_id,
+      sighting_id,
+      kind,
+      channel,
+      title,
+      body,
+      action_url,
+      meta,
+      is_read,
+      archived_at,
+      created_at,
+      read_at
+    `)
+    .eq('recipient_profile_id', profileId)
+    .is('archived_at', null)
+    .order('created_at', { ascending: false })
+    .limit(30)
+
+  if (error) return []
+
+  return data || []
+}

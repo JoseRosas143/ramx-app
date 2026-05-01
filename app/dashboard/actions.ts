@@ -37,7 +37,7 @@ export async function updateSightingStatusAction(formData: FormData) {
 
   const { data: pet, error: petError } = await supabase
     .from('pets')
-    .select('id, primary_tutor_profile_id')
+    .select('id, public_slug, primary_tutor_profile_id')
     .eq('id', sighting.pet_id)
     .eq('primary_tutor_profile_id', user.id)
     .single()
@@ -59,6 +59,9 @@ export async function updateSightingStatusAction(formData: FormData) {
   }
 
   revalidatePath('/dashboard')
+  if (pet.public_slug) {
+    revalidatePath(`/p/${pet.public_slug}`)
+  }
 }
 
 export async function markPetRecoveredAction(formData: FormData) {
@@ -127,4 +130,92 @@ export async function markPetRecoveredAction(formData: FormData) {
   if (pet.public_slug) {
     revalidatePath(`/p/${pet.public_slug}`)
   }
+}
+
+export async function markNotificationReadAction(formData: FormData) {
+  const notificationId = String(formData.get('notificationId') || '')
+
+  if (!notificationId) {
+    throw new Error('No se recibió la notificación.')
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    throw new Error('No se pudo validar la sesión del usuario.')
+  }
+
+  const { data: notification, error: notificationError } = await supabase
+    .from('notifications')
+    .select('id, recipient_profile_id, is_read')
+    .eq('id', notificationId)
+    .eq('recipient_profile_id', user.id)
+    .single()
+
+  if (notificationError || !notification) {
+    throw new Error('No se encontró la notificación.')
+  }
+
+  const { error: updateError } = await supabase
+    .from('notifications')
+    .update({
+      is_read: true,
+      read_at: new Date().toISOString(),
+    })
+    .eq('id', notificationId)
+    .eq('recipient_profile_id', user.id)
+
+  if (updateError) {
+    throw new Error(`No se pudo actualizar la notificación: ${updateError.message}`)
+  }
+
+  revalidatePath('/dashboard')
+}
+export async function archiveNotificationAction(formData: FormData) {
+  const notificationId = String(formData.get('notificationId') || '')
+
+  if (!notificationId) {
+    throw new Error('No se recibió la notificación.')
+  }
+
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    throw new Error('No se pudo validar la sesión del usuario.')
+  }
+
+  const { data: notification, error: notificationError } = await supabase
+    .from('notifications')
+    .select('id, recipient_profile_id')
+    .eq('id', notificationId)
+    .eq('recipient_profile_id', user.id)
+    .single()
+
+  if (notificationError || !notification) {
+    throw new Error('No se encontró la notificación.')
+  }
+
+  const { error: updateError } = await supabase
+    .from('notifications')
+    .update({
+      archived_at: new Date().toISOString(),
+    })
+    .eq('id', notificationId)
+    .eq('recipient_profile_id', user.id)
+
+  if (updateError) {
+    throw new Error(`No se pudo archivar la notificación: ${updateError.message}`)
+  }
+
+  revalidatePath('/dashboard')
 }

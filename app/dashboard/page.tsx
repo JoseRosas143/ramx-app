@@ -1,10 +1,18 @@
 import { redirect } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { createClient } from '@/lib/supabase/server'
-import { getTutorPets, getTutorSightings } from '@/lib/dashboard'
+import {
+  getTutorNotifications,
+  getTutorPets,
+  getTutorSightings,
+} from '@/lib/dashboard'
 import DashboardPetCard from '@/components/dashboard-pet-card'
 import LogoutButton from './logout-button'
-import { updateSightingStatusAction } from './actions'
+import {
+  archiveNotificationAction,
+  markNotificationReadAction,
+  updateSightingStatusAction,
+} from './actions'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -29,6 +37,22 @@ export default async function DashboardPage() {
 
   const pets = await getTutorPets(user.id)
   const sightings = await getTutorSightings(user.id)
+  const rawNotifications = await getTutorNotifications(user.id)
+
+  const notifications = rawNotifications
+    .filter((item: any) => {
+      if (item.channel === 'email' && item.kind !== 'system') {
+        return false
+      }
+      return true
+    })
+    .sort((a: any, b: any) => {
+      if (a.is_read !== b.is_read) {
+        return Number(a.is_read) - Number(b.is_read)
+      }
+
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
 
   const visibleSightings = sightings.filter((item: any) => item.status !== 'archived')
   const pendingSightings = visibleSightings.filter(
@@ -43,17 +67,13 @@ export default async function DashboardPage() {
   ).length
   const activePetsCount = pets.length - lostPetsCount
 
-  const newCount = visibleSightings.filter((item: any) => item.status === 'new').length
-  const reviewedCount = visibleSightings.filter((item: any) => item.status === 'reviewed').length
-  const resolvedCount = visibleSightings.filter((item: any) => item.status === 'resolved').length
+  const unreadNotifications = notifications.filter((item: any) => !item.is_read).length
   const geolocatedCount = visibleSightings.filter(
     (item: any) => typeof item.lat === 'number' && typeof item.lng === 'number'
   ).length
   const safeCount = visibleSightings.filter(
     (item: any) => item.report_type === 'found_safe'
   ).length
-
-  const latestSignal = visibleSightings[0] || null
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
@@ -70,7 +90,7 @@ export default async function DashboardPage() {
                   Hola, {profile?.full_name || 'Tutor'}
                 </h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600 sm:text-base">
-                  Aquí puedes ver tus mascotas y gestionar los reportes públicos recibidos.
+                  Aquí puedes ver tus mascotas, alertas nuevas y gestionar los reportes públicos recibidos.
                 </p>
               </div>
             </div>
@@ -91,38 +111,116 @@ export default async function DashboardPage() {
             <StatCard label="Mascotas" value={String(pets.length)} />
             <StatCard label="Activas" value={String(activePetsCount)} />
             <StatCard label="Extraviadas" value={String(lostPetsCount)} />
-            <StatCard label="Pendientes" value={String(pendingSightings.length)} />
+            <StatCard label="Alertas nuevas" value={String(unreadNotifications)} />
             <StatCard label="Con GPS" value={String(geolocatedCount)} />
             <StatCard label="Resguardada" value={String(safeCount)} />
           </div>
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-3">
-          <SignalBox
-            title="Última señal"
-            body={
-              latestSignal
-                ? `${getReportTypeLabel(latestSignal.report_type)} · ${latestSignal.pets?.name || 'Mascota'}`
-                : 'Sin reportes todavía'
-            }
-            subtext={
-              latestSignal?.seen_at
-                ? `${formatRelativeTime(latestSignal.seen_at)} · ${
-                    latestSignal.location_text || 'Ubicación no especificada'
-                  }`
-                : 'En cuanto lleguen avistamientos aparecerán aquí.'
-            }
-          />
-          <SignalBox
-            title="Estados activos"
-            body={`${newCount} nuevos · ${reviewedCount} revisados`}
-            subtext="Estos son los reportes que aún requieren atención o seguimiento."
-          />
-          <SignalBox
-            title="Historial resuelto"
-            body={`${resolvedCount} resueltos`}
-            subtext="Mantener este bloque te ayuda a entender qué señales sí terminaron en cierre útil."
-          />
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
+              Centro de alertas
+            </h2>
+            <p className="mt-1 text-sm text-neutral-600">
+              Notificaciones internas y señales recientes del sistema.
+            </p>
+          </div>
+
+          {notifications.length === 0 ? (
+            <div className="rounded-[28px] border border-neutral-200 bg-white/95 p-6 shadow-lg">
+              <p className="text-sm text-neutral-600">
+                Aún no hay alertas en tu cuenta.
+              </p>
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {notifications.map((item: any) => (
+                <div
+                  key={item.id}
+                  className={`rounded-[24px] border bg-white/95 p-5 shadow-lg ${
+                    item.is_read ? 'border-neutral-200' : 'border-amber-200'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${
+                        item.is_read
+                          ? 'bg-neutral-100 text-neutral-700'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {item.is_read ? 'Leída' : 'Nueva'}
+                    </span>
+
+                    <span className="inline-flex rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
+                      {formatRelativeTime(item.created_at)}
+                    </span>
+
+                    <span className="inline-flex rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-700">
+                      {item.channel === 'email'
+                        ? 'Correo'
+                        : item.channel === 'whatsapp'
+                        ? 'WhatsApp'
+                        : 'Interna'}
+                    </span>
+                  </div>
+
+                  <h3 className="mt-3 text-lg font-semibold text-neutral-950">
+                    {item.title}
+                  </h3>
+
+                  <p className="mt-2 text-sm leading-6 text-neutral-700">
+                    {item.body}
+                  </p>
+
+                  {item.meta?.locationText ? (
+                    <div className="mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">
+                        Ubicación reportada
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-neutral-950">
+                        {item.meta.locationText}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {item.action_url || item.meta?.publicSlug ? (
+                      <a
+                        href={item.action_url || `/p/${item.meta.publicSlug}`}
+                        className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50"
+                      >
+                        Ver perfil público
+                      </a>
+                    ) : null}
+
+                    {!item.is_read ? (
+                      <form action={markNotificationReadAction}>
+                        <input type="hidden" name="notificationId" value={item.id} />
+                        <button
+                          type="submit"
+                          className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
+                        >
+                          Marcar como leída
+                        </button>
+                      </form>
+                    ) : null}
+
+                    <form action={archiveNotificationAction}>
+                      <input type="hidden" name="notificationId" value={item.id} />
+                      <button
+                        type="submit"
+                        className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                      >
+                        Archivar
+                      </button>
+                    </form>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="space-y-4">
@@ -148,7 +246,7 @@ export default async function DashboardPage() {
         <section className="space-y-4">
           <div>
             <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
-              Avistamientos y reportes pendientes
+              Reportes pendientes
             </h2>
             <p className="mt-1 text-sm text-neutral-600">
               Este bloque prioriza lo nuevo y lo que sigue en revisión.
@@ -237,10 +335,7 @@ function SightingCard({ item }: { item: any }) {
       </div>
 
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <MiniInfo
-          label="Ubicación"
-          value={item.location_text || 'No disponible'}
-        />
+        <MiniInfo label="Ubicación" value={item.location_text || 'No disponible'} />
         <MiniInfo
           label="Fecha"
           value={
@@ -249,15 +344,10 @@ function SightingCard({ item }: { item: any }) {
               : 'No disponible'
           }
         />
-        <MiniInfo
-          label="Nombre"
-          value={item.reporter_name || 'No disponible'}
-        />
+        <MiniInfo label="Nombre" value={item.reporter_name || 'No disponible'} />
         <MiniInfo
           label="Teléfono / WhatsApp"
-          value={
-            item.reporter_whatsapp || item.reporter_phone || 'No disponible'
-          }
+          value={item.reporter_whatsapp || item.reporter_phone || 'No disponible'}
         />
       </div>
 
@@ -343,26 +433,6 @@ function StatCard({ label, value }: { label: string; value: string }) {
       <p className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950">
         {value}
       </p>
-    </div>
-  )
-}
-
-function SignalBox({
-  title,
-  body,
-  subtext,
-}: {
-  title: string
-  body: string
-  subtext: string
-}) {
-  return (
-    <div className="rounded-[24px] border border-neutral-200 bg-white/95 p-4 shadow-lg">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">
-        {title}
-      </p>
-      <p className="mt-2 text-base font-semibold text-neutral-950">{body}</p>
-      <p className="mt-2 text-sm leading-6 text-neutral-600">{subtext}</p>
     </div>
   )
 }

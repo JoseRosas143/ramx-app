@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
 type Props = {
@@ -17,7 +16,6 @@ export default function PublicReportForm({
   petName,
   reportType,
 }: Props) {
-  const supabase = createClient()
   const router = useRouter()
 
   const [saving, setSaving] = useState(false)
@@ -55,7 +53,9 @@ export default function PublicReportForm({
         setLng(nextLng)
 
         if (!locationText.trim()) {
-          setLocationText(`Ubicación aproximada capturada por GPS (${nextLat}, ${nextLng})`)
+          setLocationText(
+            `Ubicación aproximada capturada por GPS (${nextLat}, ${nextLng})`
+          )
         }
 
         setLocationStatus('Ubicación capturada correctamente.')
@@ -86,28 +86,43 @@ export default function PublicReportForm({
     setSaving(true)
     setErrorMessage('')
 
-    const { error } = await supabase.from('sightings').insert({
-      pet_id: petId,
-      report_type: reportType,
-      reporter_name: reporterName || null,
-      reporter_phone: reporterPhone || null,
-      reporter_whatsapp: reporterWhatsapp || null,
-      seen_at: seenAt ? new Date(seenAt).toISOString() : new Date().toISOString(),
-      location_text: locationText || null,
-      notes: notes || null,
-      lat,
-      lng,
-      status: 'new',
-    })
+    try {
+      const response = await fetch('/api/public-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          petId,
+          petSlug,
+          petName,
+          reportType,
+          reporterName,
+          reporterPhone,
+          reporterWhatsapp,
+          seenAt,
+          locationText,
+          notes,
+          lat,
+          lng,
+        }),
+      })
 
-    if (error) {
-      setErrorMessage(error.message)
+      const result = await response.json()
+
+      if (!response.ok) {
+        setErrorMessage(result?.error || 'No se pudo enviar el reporte.')
+        setSaving(false)
+        return
+      }
+
+      setDone(true)
       setSaving(false)
-      return
+    } catch (error) {
+      console.error(error)
+      setErrorMessage('Ocurrió un error inesperado al enviar el reporte.')
+      setSaving(false)
     }
-
-    setDone(true)
-    setSaving(false)
   }
 
   if (done) {
@@ -187,7 +202,7 @@ export default function PublicReportForm({
               {locating ? 'Obteniendo ubicación...' : 'Usar mi ubicación actual'}
             </button>
 
-            {(lat !== null || lng !== null) ? (
+            {lat !== null || lng !== null ? (
               <button
                 type="button"
                 onClick={clearCapturedLocation}
@@ -202,7 +217,7 @@ export default function PublicReportForm({
             <p className="mt-3 text-sm text-sky-900">{locationStatus}</p>
           ) : null}
 
-          {(lat !== null && lng !== null) ? (
+          {lat !== null && lng !== null ? (
             <div className="mt-3 rounded-2xl border border-sky-200 bg-white px-4 py-3 text-sm text-neutral-800">
               Coordenadas capturadas: {lat}, {lng}
             </div>
