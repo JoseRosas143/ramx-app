@@ -49,7 +49,10 @@ export default async function PublicPetPage({ params }: PageProps) {
   const isLost = pet.status === 'lost' || hasActiveLostReport
 
   const posterPhotoUrl =
-    pet.profile_photo_url || pet.photos?.[0]?.file_url || null
+  pet.active_poster_image_url ||
+  pet.profile_photo_url ||
+  pet.photos?.[0]?.file_url ||
+  null
 
   const canShowMap =
     isLost &&
