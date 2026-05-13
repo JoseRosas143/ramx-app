@@ -49,10 +49,10 @@ export default async function PublicPetPage({ params }: PageProps) {
   const isLost = pet.status === 'lost' || hasActiveLostReport
 
   const posterPhotoUrl =
-  pet.active_poster_image_url ||
-  pet.profile_photo_url ||
-  pet.photos?.[0]?.file_url ||
-  null
+    pet.active_poster_image_url ||
+    pet.profile_photo_url ||
+    pet.photos?.[0]?.file_url ||
+    null
 
   const canShowMap =
     isLost &&
@@ -132,6 +132,39 @@ export default async function PublicPetPage({ params }: PageProps) {
                 ) : null}
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="rounded-[28px] border border-white/70 bg-white/95 p-5 shadow-lg">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-950">
+                Estado de salud
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-neutral-600">
+                Información sanitaria resumida para identificación y cuidado básico.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <HealthStatusBadge
+              title="Esterilización"
+              label={pet.sterilization_label || 'No especificado'}
+              status={pet.sterilization_status}
+            />
+
+            <HealthStatusBadge
+              title="Vacunación"
+              label={pet.vaccination_label || 'Sin registro'}
+              status={pet.vaccination_status}
+            />
+
+            <HealthStatusBadge
+              title="Desparasitación"
+              label={pet.deworming_label || 'Sin registro'}
+              status={pet.deworming_status}
+            />
           </div>
         </section>
 
@@ -351,6 +384,48 @@ function MiniStat({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl border border-neutral-200 bg-white p-3 shadow-sm">
       <p className="text-[11px] uppercase tracking-wide text-neutral-500">{label}</p>
       <p className="mt-1 text-sm font-medium text-neutral-950">{value}</p>
+    </div>
+  )
+}
+
+function HealthStatusBadge({
+  title,
+  label,
+  status,
+}: {
+  title: string
+  label: string
+  status: string | null
+}) {
+  const styles =
+    status === 'up_to_date' || status === 'sterilized'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+      : status === 'soon' || status === 'unknown'
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : status === 'due' || status === 'not_sterilized' || status === 'no_record'
+          ? 'border-red-200 bg-red-50 text-red-800'
+          : 'border-neutral-200 bg-neutral-50 text-neutral-700'
+
+  const dotStyles =
+    status === 'up_to_date' || status === 'sterilized'
+      ? 'bg-emerald-500'
+      : status === 'soon' || status === 'unknown'
+        ? 'bg-amber-500'
+        : status === 'due' || status === 'not_sterilized' || status === 'no_record'
+          ? 'bg-red-500'
+          : 'bg-neutral-400'
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${styles}`}>
+      <div className="flex items-center gap-2">
+        <span className={`h-2.5 w-2.5 rounded-full ${dotStyles}`} />
+        <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
+          {title}
+        </p>
+      </div>
+      <p className="mt-2 text-sm font-semibold">
+        {label}
+      </p>
     </div>
   )
 }

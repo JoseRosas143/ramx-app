@@ -96,11 +96,11 @@ export default async function DashboardPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <a
-                href="/onboarding"
-                className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                Registrar otra mascota
+            <a
+              href="/dashboard/pets/new"
+              className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+              > 
+              Agregar nueva mascota
               </a>
 
               <LogoutButton />

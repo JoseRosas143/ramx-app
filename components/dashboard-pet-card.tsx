@@ -105,6 +105,12 @@ export default function DashboardPetCard({ pet }: { pet: Pet }) {
           >
             Editar perfil
           </Link>
+          <Link
+  href={`/dashboard/pets/${pet.id}/medical`}
+  className="inline-flex items-center justify-center rounded-2xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-900 transition-all duration-200 hover:bg-white hover:shadow-md"
+>
+  Expediente clínico
+</Link>
         </div>
       </div>
     </div>
