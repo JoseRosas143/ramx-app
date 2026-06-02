@@ -34,6 +34,7 @@ export async function getPetMedicalRecord(profileId: string, petId: string) {
     dewormingsResult,
     visitsResult,
     documentsResult,
+    remindersResult,
     vaccineCatalogResult,
     dewormerCatalogResult,
   ] = await Promise.all([
@@ -66,6 +67,14 @@ export async function getPetMedicalRecord(profileId: string, petId: string) {
       .select('*')
       .eq('pet_id', petId)
       .order('created_at', { ascending: false }),
+    
+    supabase
+      .from('pet_reminders')
+      .select('*')
+      .eq('pet_id', petId)
+      .eq('recipient_profile_id', profileId)
+      .in('status', ['pending', 'failed'])
+      .order('due_date', { ascending: true }),
 
     supabase
       .from('medical_vaccine_catalog')
@@ -83,15 +92,28 @@ export async function getPetMedicalRecord(profileId: string, petId: string) {
       .order('category', { ascending: true })
       .order('name', { ascending: true }),
   ])
+  const documentsWithSignedUrls = await Promise.all(
+    (documentsResult.data || []).map(async (doc: any) => {
+      const { data } = await supabase.storage
+        .from('pet-medical-documents')
+        .createSignedUrl(doc.file_url, 60 * 10)
 
+      return {
+        ...doc,
+        signed_url: data?.signedUrl || null,
+      }
+    })
+  )
   return {
     pet,
     medicalProfile: medicalProfileResult.data,
     vaccinations: vaccinationsResult.data || [],
     dewormings: dewormingsResult.data || [],
     visits: visitsResult.data || [],
-    documents: documentsResult.data || [],
+    documents: documentsWithSignedUrls,
+    reminders: remindersResult.data || [],
     vaccineCatalog: vaccineCatalogResult.data || [],
     dewormerCatalog: dewormerCatalogResult.data || [],
+    
   }
 }
