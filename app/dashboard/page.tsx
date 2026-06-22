@@ -13,6 +13,7 @@ import {
   markNotificationReadAction,
   updateSightingStatusAction,
 } from './actions'
+import { ensureWelcomeEmailSent } from '@/lib/welcome-email'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -26,18 +27,28 @@ export default async function DashboardPage() {
   }
 
   const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
+  .from('profiles')
+  .select('*')
+  .eq('id', user.id)
+  .single()
 
-  if (profile && !profile.onboarding_completed) {
-    redirect('/onboarding')
-  }
+if (!profile) {
+  redirect('/auth/login')
+}
 
-  const pets = await getTutorPets(user.id)
-  const sightings = await getTutorSightings(user.id)
-  const rawNotifications = await getTutorNotifications(user.id)
+if (!profile.onboarding_completed) {
+  redirect('/onboarding')
+}
+
+await ensureWelcomeEmailSent({
+  profileId: user.id,
+  email: user.email,
+  fullName: profile.full_name,
+})
+
+const pets = await getTutorPets(user.id)
+const sightings = await getTutorSightings(user.id)
+const rawNotifications = await getTutorNotifications(user.id)
 
   const notifications = rawNotifications
     .filter((item: any) => {
@@ -95,16 +106,23 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-            <a
-              href="/dashboard/pets/new"
-              className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
-              > 
-              Agregar nueva mascota
-              </a>
+           <div className="flex flex-wrap gap-3">
+  <a
+    href="/dashboard/account"
+    className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+  >
+    ⚙️ Configuración
+  </a>
 
-              <LogoutButton />
-            </div>
+  <a
+    href="/dashboard/pets/new"
+    className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+  >
+    Agregar nueva mascota
+  </a>
+
+  <LogoutButton />
+</div>
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-3 xl:grid-cols-6">

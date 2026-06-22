@@ -128,3 +128,94 @@
     @apply font-sans;
   }
 }
+/* RAMX global dark-mode adapter
+   Permite que el modo oscuro alcance pantallas que aún tienen colores claros hardcodeados.
+   Más adelante se puede refactorizar página por página a tokens bg-background/text-foreground.
+*/
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background: #020617 !important;
+  color: #f8fafc !important;
+}
+
+html.dark main {
+  background:
+    radial-gradient(circle at top left, rgba(251, 146, 60, 0.16), transparent 34%),
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.14), transparent 30%),
+    linear-gradient(180deg, #020617 0%, #0f172a 42%, #020617 100%) !important;
+  color: #f8fafc !important;
+}
+
+html.dark section,
+html.dark article {
+  color: #f8fafc;
+}
+
+html.dark .bg-white,
+html.dark .bg-white\/90,
+html.dark .bg-white\/95,
+html.dark .bg-white\/80,
+html.dark .bg-white\/85,
+html.dark .bg-white\/70 {
+  background-color: rgba(15, 23, 42, 0.92) !important;
+}
+
+html.dark .bg-neutral-50,
+html.dark .bg-neutral-50\/80,
+html.dark .bg-neutral-100 {
+  background-color: rgba(30, 41, 59, 0.82) !important;
+}
+
+html.dark .border-white\/70,
+html.dark .border-white\/80,
+html.dark .border-neutral-200,
+html.dark .border-neutral-300 {
+  border-color: rgba(71, 85, 105, 0.75) !important;
+}
+
+html.dark .text-neutral-950,
+html.dark .text-neutral-900,
+html.dark .text-neutral-800,
+html.dark .text-neutral-700 {
+  color: #f8fafc !important;
+}
+
+html.dark .text-neutral-600,
+html.dark .text-neutral-500 {
+  color: #cbd5e1 !important;
+}
+
+html.dark input,
+html.dark textarea,
+html.dark select {
+  background-color: rgba(2, 6, 23, 0.82) !important;
+  border-color: rgba(71, 85, 105, 0.9) !important;
+  color: #f8fafc !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.dark input:disabled,
+html.dark textarea:disabled,
+html.dark select:disabled {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  color: #64748b !important;
+}
+
+html.dark .shadow-lg,
+html.dark .shadow-xl,
+html.dark .shadow-2xl {
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38) !important;
+}
+
+html.dark a:hover,
+html.dark button:hover {
+  opacity: 0.96;
+}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { compressImageFile } from '@/lib/image-compression'
 import { updatePetMainProfileAction } from './actions'
 
 type Photo = {
@@ -29,8 +30,34 @@ type LostReport = {
   updated_at: string | null
 }
 
+type PublicSettings = {
+  pet_id: string
+  show_pet_name: boolean
+  show_profile_photo: boolean
+  show_species: boolean
+  show_breed: boolean
+  show_sex: boolean
+  show_age: boolean
+  show_microchip: boolean
+  show_medical_alerts: boolean
+  show_primary_tutor_phone: boolean
+  show_whatsapp_button: boolean
+  show_emergency_contacts: boolean
+  show_last_seen_info_when_lost: boolean
+  show_map_when_lost: boolean
+}
+
+type VetInterest = {
+  id: string
+  clinic_name: string | null
+  phone: string | null
+  state: string | null
+  municipality: string | null
+}
+
 type PetData = {
   id: string
+  primary_tutor_profile_id?: string
   name: string
   species: string | null
   breed: string | null
@@ -43,56 +70,8 @@ type PetData = {
   medical_alerts: string | null
   status: string | null
   profile_photo_url: string | null
-  pet_public_settings?:
-    | {
-        pet_id: string
-        show_pet_name: boolean
-        show_profile_photo: boolean
-        show_species: boolean
-        show_breed: boolean
-        show_sex: boolean
-        show_age: boolean
-        show_microchip: boolean
-        show_medical_alerts: boolean
-        show_primary_tutor_phone: boolean
-        show_whatsapp_button: boolean
-        show_emergency_contacts: boolean
-        show_last_seen_info_when_lost: boolean
-        show_map_when_lost: boolean
-      }[]
-    | {
-        pet_id: string
-        show_pet_name: boolean
-        show_profile_photo: boolean
-        show_species: boolean
-        show_breed: boolean
-        show_sex: boolean
-        show_age: boolean
-        show_microchip: boolean
-        show_medical_alerts: boolean
-        show_primary_tutor_phone: boolean
-        show_whatsapp_button: boolean
-        show_emergency_contacts: boolean
-        show_last_seen_info_when_lost: boolean
-        show_map_when_lost: boolean
-      }
-    | null
-  pet_onboarding_vet_interest?:
-    | {
-        id: string
-        clinic_name: string | null
-        phone: string | null
-        state: string | null
-        municipality: string | null
-      }[]
-    | {
-        id: string
-        clinic_name: string | null
-        phone: string | null
-        state: string | null
-        municipality: string | null
-      }
-    | null
+  pet_public_settings?: PublicSettings[] | PublicSettings | null
+  pet_onboarding_vet_interest?: VetInterest[] | VetInterest | null
   pet_photos?: Photo[]
   lost_reports?: LostReport[]
 }
@@ -114,12 +93,17 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
   )
 
   const activeLostReport =
-    (pet.lost_reports || []).find((report) => report.status === 'active') || null
+    (pet.lost_reports || []).find(
+      (report) => report.status === 'active' && !report.closed_at
+    ) || null
 
   const [profileId, setProfileId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [message, setMessage] = useState('')
+  const [messageTone, setMessageTone] = useState<'neutral' | 'success' | 'error'>(
+    'neutral'
+  )
 
   const [name, setName] = useState(pet.name || '')
   const [species, setSpecies] = useState(pet.species || '')
@@ -163,6 +147,15 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
   const [showWhatsappButton, setShowWhatsappButton] = useState(
     settings?.show_whatsapp_button ?? true
   )
+  const [showEmergencyContacts, setShowEmergencyContacts] = useState(
+    settings?.show_emergency_contacts ?? true
+  )
+  const [showLastSeenInfoWhenLost, setShowLastSeenInfoWhenLost] = useState(
+    settings?.show_last_seen_info_when_lost ?? true
+  )
+  const [showMapWhenLost, setShowMapWhenLost] = useState(
+    settings?.show_map_when_lost ?? true
+  )
 
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
 
@@ -184,7 +177,6 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
   const [publicContactInstructions, setPublicContactInstructions] = useState(
     activeLostReport?.public_contact_instructions || ''
   )
-
   const [posterImageUrl, setPosterImageUrl] = useState(
     activeLostReport?.poster_image_url || ''
   )
@@ -213,6 +205,14 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
 
     loadUser()
   }, [supabase])
+
+  function setStatusMessage(
+    text: string,
+    tone: 'neutral' | 'success' | 'error' = 'neutral'
+  ) {
+    setMessage(text)
+    setMessageTone(tone)
+  }
 
   const handleUseCurrentLostLocation = () => {
     setLostLocationStatus('')
@@ -263,41 +263,57 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
 
   const handleUploadLostPosterPhoto = async (file: File | null) => {
     if (!file) return
-  
+
     setUploadingPosterImage(true)
-    setMessage('')
-  
+    setStatusMessage('')
+
     try {
       if (!profileId) {
-        setMessage('No se pudo identificar al usuario actual.')
-        setUploadingPosterImage(false)
+        setStatusMessage('No se pudo identificar al usuario actual.', 'error')
         return
       }
-  
-      const ext = file.name.split('.').pop()
+
+      const compressedFile = await compressImageFile(file, {
+        maxWidth: 1800,
+        maxHeight: 1800,
+        quality: 0.86,
+        outputType: 'image/webp',
+      })
+
+      const ext = getSafeExtension(compressedFile.name)
       const filePath = `${pet.id}/lost-poster-${Date.now()}.${ext}`
-  
+
       const { error: uploadError } = await supabase.storage
         .from('pet-photos')
-        .upload(filePath, file, { upsert: true })
-  
+        .upload(filePath, compressedFile, {
+          upsert: true,
+          contentType: compressedFile.type || undefined,
+        })
+
       if (uploadError) {
-        setMessage(uploadError.message)
-        setUploadingPosterImage(false)
+        setStatusMessage(uploadError.message, 'error')
         return
       }
-  
+
       const { data: publicUrlData } = supabase.storage
         .from('pet-photos')
         .getPublicUrl(filePath)
-  
+
       setPosterImageUrl(publicUrlData.publicUrl)
-      setMessage('Foto reciente para búsqueda cargada correctamente.')
+      setStatusMessage('Foto reciente para búsqueda cargada correctamente.', 'success')
+    } catch (error) {
+      console.error('Lost poster upload error:', error)
+      setStatusMessage(
+        error instanceof Error
+          ? error.message
+          : 'No se pudo cargar la foto reciente.',
+        'error'
+      )
     } finally {
       setUploadingPosterImage(false)
     }
   }
-  
+
   const clearLostPosterPhoto = () => {
     setPosterImageUrl('')
   }
@@ -305,19 +321,28 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
-    setMessage('')
+    setStatusMessage('')
 
     if (!profileId) {
-      setMessage('No se pudo identificar al usuario actual. Vuelve a iniciar sesión.')
+      setStatusMessage('No se pudo identificar al usuario actual.', 'error')
       setSaving(false)
       return
     }
 
+    const normalizedName = cleanText(name)
     const coverUrl =
-      photos.find((photo) => photo.is_cover)?.file_url || photos[0]?.file_url || null
+      photos.find((photo) => photo.is_cover)?.file_url ||
+      photos[0]?.file_url ||
+      null
 
-    const petUpdateResult = await updatePetMainProfileAction(pet.id, {
-      name,
+    if (!normalizedName) {
+      setStatusMessage('El nombre de la mascota es obligatorio.', 'error')
+      setSaving(false)
+      return
+    }
+
+    const mainProfileResult = await updatePetMainProfileAction(pet.id, {
+      name: normalizedName,
       species,
       breed,
       sex,
@@ -329,79 +354,88 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
       status: isLostMode ? 'lost' : 'active',
     })
 
-    if (!petUpdateResult.ok) {
-      setMessage(petUpdateResult.message)
+    if (!mainProfileResult.ok) {
+      setStatusMessage(mainProfileResult.message, 'error')
       setSaving(false)
       return
     }
 
-    setMedicalAlerts(petUpdateResult.medical_alerts || '')
+    setMedicalAlerts(mainProfileResult.medical_alerts || '')
 
     const { error: settingsError } = await supabase
       .from('pet_public_settings')
-      .upsert({
-        pet_id: pet.id,
-        show_pet_name: showPetName,
-        show_profile_photo: showProfilePhoto,
-        show_species: showSpecies,
-        show_breed: showBreed,
-        show_sex: showSex,
-        show_age: showAge,
-        show_microchip: showMicrochip,
-        show_medical_alerts: showMedicalAlerts,
-        show_primary_tutor_phone: showPrimaryTutorPhone,
-        show_whatsapp_button: showWhatsappButton,
-      })
+      .upsert(
+        {
+          pet_id: pet.id,
+          show_pet_name: showPetName,
+          show_profile_photo: showProfilePhoto,
+          show_species: showSpecies,
+          show_breed: showBreed,
+          show_sex: showSex,
+          show_age: showAge,
+          show_microchip: showMicrochip,
+          show_medical_alerts: showMedicalAlerts,
+          show_primary_tutor_phone: showPrimaryTutorPhone,
+          show_whatsapp_button: showWhatsappButton,
+          show_emergency_contacts: showEmergencyContacts,
+          show_last_seen_info_when_lost: showLastSeenInfoWhenLost,
+          show_map_when_lost: showMapWhenLost,
+        },
+        { onConflict: 'pet_id' }
+      )
 
     if (settingsError) {
-      setMessage(settingsError.message)
+      setStatusMessage(settingsError.message, 'error')
       setSaving(false)
       return
     }
+
+    const hasVetData =
+      cleanText(clinicName) ||
+      cleanText(vetPhone) ||
+      cleanText(vetState) ||
+      cleanText(vetMunicipality)
 
     if (vet?.id) {
       const { error: vetError } = await supabase
         .from('pet_onboarding_vet_interest')
         .update({
-          clinic_name: clinicName || null,
-          phone: vetPhone || null,
-          state: vetState || null,
-          municipality: vetMunicipality || null,
+          clinic_name: cleanText(clinicName),
+          phone: cleanText(vetPhone),
+          state: cleanText(vetState),
+          municipality: cleanText(vetMunicipality),
         })
         .eq('id', vet.id)
 
       if (vetError) {
-        setMessage(vetError.message)
+        setStatusMessage(vetError.message, 'error')
         setSaving(false)
         return
       }
-    } else if (clinicName || vetPhone || vetState || vetMunicipality) {
+    } else if (hasVetData) {
       const { error: vetInsertError } = await supabase
         .from('pet_onboarding_vet_interest')
         .insert({
           pet_id: pet.id,
-          clinic_name: clinicName || null,
-          phone: vetPhone || null,
-          state: vetState || null,
-          municipality: vetMunicipality || null,
+          clinic_name: cleanText(clinicName),
+          phone: cleanText(vetPhone),
+          state: cleanText(vetState),
+          municipality: cleanText(vetMunicipality),
         })
 
       if (vetInsertError) {
-        setMessage(vetInsertError.message)
+        setStatusMessage(vetInsertError.message, 'error')
         setSaving(false)
         return
       }
     }
 
     if (isLostMode) {
-      if (!profileId) {
-        setMessage('No se pudo identificar al usuario actual.')
-        setSaving(false)
-        return
-      }
-
       if ((lostLat && !lostLng) || (!lostLat && lostLng)) {
-        setMessage('Para usar mapa del extravío, captura latitud y longitud completas.')
+        setStatusMessage(
+          'Para usar mapa del extravío, captura latitud y longitud completas.',
+          'error'
+        )
         setSaving(false)
         return
       }
@@ -414,13 +448,13 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
         (lostLat && Number.isNaN(parsedLostLat as number)) ||
         (lostLng && Number.isNaN(parsedLostLng as number))
       ) {
-        setMessage('Las coordenadas del extravío no son válidas.')
+        setStatusMessage('Las coordenadas del extravío no son válidas.', 'error')
         setSaving(false)
         return
       }
 
       if (lostRadiusKm && Number.isNaN(parsedRadiusKm)) {
-        setMessage('El radio de búsqueda no es válido.')
+        setStatusMessage('El radio de búsqueda no es válido.', 'error')
         setSaving(false)
         return
       }
@@ -431,20 +465,20 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
           .update({
             status: 'active',
             lost_at: lostAt ? new Date(lostAt).toISOString() : null,
-            last_seen_text: lastSeenText || null,
+            last_seen_text: cleanText(lastSeenText),
             lat: parsedLostLat,
             lng: parsedLostLng,
             radius_km: parsedRadiusKm || 1,
-            reward_text: rewardText || null,
-            circumstances: circumstances || null,
-            public_contact_instructions: publicContactInstructions || null,
-            poster_image_url: posterImageUrl || null,
+            reward_text: cleanText(rewardText),
+            circumstances: cleanText(circumstances),
+            public_contact_instructions: cleanText(publicContactInstructions),
+            poster_image_url: cleanText(posterImageUrl),
             closed_at: null,
           })
           .eq('id', activeLostReport.id)
 
         if (lostUpdateError) {
-          setMessage(lostUpdateError.message)
+          setStatusMessage(lostUpdateError.message, 'error')
           setSaving(false)
           return
         }
@@ -455,19 +489,21 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
             pet_id: pet.id,
             reported_by_profile_id: profileId,
             status: 'active',
-            lost_at: lostAt ? new Date(lostAt).toISOString() : new Date().toISOString(),
-            last_seen_text: lastSeenText || null,
+            lost_at: lostAt
+              ? new Date(lostAt).toISOString()
+              : new Date().toISOString(),
+            last_seen_text: cleanText(lastSeenText),
             lat: parsedLostLat,
             lng: parsedLostLng,
             radius_km: parsedRadiusKm || 1,
-            reward_text: rewardText || null,
-            circumstances: circumstances || null,
-            public_contact_instructions: publicContactInstructions || null,
-            poster_image_url: posterImageUrl || null,
+            reward_text: cleanText(rewardText),
+            circumstances: cleanText(circumstances),
+            public_contact_instructions: cleanText(publicContactInstructions),
+            poster_image_url: cleanText(posterImageUrl),
           })
 
         if (lostInsertError) {
-          setMessage(lostInsertError.message)
+          setStatusMessage(lostInsertError.message, 'error')
           setSaving(false)
           return
         }
@@ -482,13 +518,13 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
         .eq('id', activeLostReport.id)
 
       if (lostCloseError) {
-        setMessage(lostCloseError.message)
+        setStatusMessage(lostCloseError.message, 'error')
         setSaving(false)
         return
       }
     }
 
-    setMessage('Perfil actualizado correctamente.')
+    setStatusMessage('Perfil actualizado correctamente.', 'success')
     setSaving(false)
     router.refresh()
   }
@@ -497,29 +533,36 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     if (!files || files.length === 0) return
 
     setUploading(true)
-    setMessage('')
+    setStatusMessage('')
 
     try {
       if (!profileId) {
-        setMessage('No se pudo identificar al usuario actual.')
-        setUploading(false)
+        setStatusMessage('No se pudo identificar al usuario actual.', 'error')
         return
       }
 
       const uploaded: Photo[] = []
 
       for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        const ext = file.name.split('.').pop()
+        const compressedFile = await compressImageFile(files[i], {
+          maxWidth: 1800,
+          maxHeight: 1800,
+          quality: 0.82,
+          outputType: 'image/webp',
+        })
+
+        const ext = getSafeExtension(compressedFile.name)
         const filePath = `${pet.id}/${Date.now()}-${i}.${ext}`
 
         const { error: uploadError } = await supabase.storage
           .from('pet-photos')
-          .upload(filePath, file, { upsert: false })
+          .upload(filePath, compressedFile, {
+            upsert: false,
+            contentType: compressedFile.type || undefined,
+          })
 
         if (uploadError) {
-          setMessage(uploadError.message)
-          setUploading(false)
+          setStatusMessage(uploadError.message, 'error')
           return
         }
 
@@ -540,34 +583,51 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
           .single()
 
         if (insertError) {
-          setMessage(insertError.message)
-          setUploading(false)
+          setStatusMessage(insertError.message, 'error')
           return
         }
 
-        uploaded.push(insertedPhoto)
+        uploaded.push(insertedPhoto as Photo)
       }
 
       const newPhotos = [...photos, ...uploaded]
       setPhotos(newPhotos)
 
       if (newPhotos.length > 0) {
+        const nextCover =
+          newPhotos.find((photo) => photo.is_cover)?.file_url ||
+          newPhotos[0]?.file_url ||
+          null
+
         await supabase
           .from('pets')
           .update({
-            profile_photo_url:
-              newPhotos.find((photo) => photo.is_cover)?.file_url ||
-              newPhotos[0]?.file_url,
+            profile_photo_url: nextCover,
           })
           .eq('id', pet.id)
+          .eq('primary_tutor_profile_id', profileId)
       }
+
+      setStatusMessage('Fotos cargadas correctamente.', 'success')
+      router.refresh()
+    } catch (error) {
+      console.error('Photo upload error:', error)
+      setStatusMessage(
+        error instanceof Error ? error.message : 'No se pudieron cargar las fotos.',
+        'error'
+      )
     } finally {
       setUploading(false)
     }
   }
 
   const setAsCover = async (photoId: string) => {
-    setMessage('')
+    setStatusMessage('')
+
+    if (!profileId) {
+      setStatusMessage('No se pudo identificar al usuario actual.', 'error')
+      return
+    }
 
     const updatedPhotos = photos.map((photo) => ({
       ...photo,
@@ -581,7 +641,7 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
         .eq('id', photo.id)
 
       if (error) {
-        setMessage(error.message)
+        setStatusMessage(error.message, 'error')
         return
       }
     }
@@ -594,13 +654,19 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
         profile_photo_url: cover?.file_url || null,
       })
       .eq('id', pet.id)
+      .eq('primary_tutor_profile_id', profileId)
 
     setPhotos(updatedPhotos)
     router.refresh()
   }
 
   const deletePhoto = async (photoId: string) => {
-    setMessage('')
+    setStatusMessage('')
+
+    if (!profileId) {
+      setStatusMessage('No se pudo identificar al usuario actual.', 'error')
+      return
+    }
 
     const { error } = await supabase
       .from('pet_photos')
@@ -608,7 +674,7 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
       .eq('id', photoId)
 
     if (error) {
-      setMessage(error.message)
+      setStatusMessage(error.message, 'error')
       return
     }
 
@@ -638,6 +704,7 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
           null,
       })
       .eq('id', pet.id)
+      .eq('primary_tutor_profile_id', profileId)
 
     setPhotos(normalized)
     router.refresh()
@@ -650,18 +717,23 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
           <Field label="Nombre">
             <InputLike value={name} onChange={setName} />
           </Field>
+
           <Field label="Especie">
             <InputLike value={species} onChange={setSpecies} />
           </Field>
+
           <Field label="Raza">
             <InputLike value={breed} onChange={setBreed} />
           </Field>
+
           <Field label="Sexo">
             <InputLike value={sex} onChange={setSex} />
           </Field>
+
           <Field label="Color">
             <InputLike value={color} onChange={setColor} />
           </Field>
+
           <Field label="Fecha de nacimiento">
             <input
               type="date"
@@ -670,9 +742,11 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
               className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none focus:border-neutral-500"
             />
           </Field>
+
           <Field label="Microchip">
             <InputLike value={microchipNumber} onChange={setMicrochipNumber} />
           </Field>
+
           <Field label="ID interno">
             <input
               value={pet.internal_id || ''}
@@ -686,7 +760,7 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
       <SectionCard title="Fotos">
         <div className="space-y-4">
           <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
-            {uploading ? 'Subiendo...' : 'Subir fotos'}
+            {uploading ? 'Comprimiendo y subiendo...' : 'Subir fotos'}
             <input
               type="file"
               accept="image/*"
@@ -695,6 +769,11 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
               onChange={(e) => handleUploadPhotos(e.target.files)}
             />
           </label>
+
+          <p className="text-xs leading-5 text-neutral-500">
+            Las fotos nuevas se optimizan automáticamente en formato WebP para
+            mantener buena calidad y mejorar la velocidad del perfil público.
+          </p>
 
           {photos.length === 0 ? (
             <p className="text-sm text-neutral-600">
@@ -773,8 +852,10 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
                 <p className="text-sm font-semibold text-red-900">
                   Ubicación base para mapa
                 </p>
+
                 <p className="mt-1 text-sm leading-6 text-red-800">
-                  Esta es la ubicación principal desde donde se perdió la mascota. Se usará para centrar el mapa público y dibujar la zona inicial de búsqueda.
+                  Esta es la ubicación principal desde donde se perdió la
+                  mascota. Se usará para centrar el mapa privado del dashboard.
                 </p>
 
                 <div className="mt-4 flex flex-wrap gap-2">
@@ -784,10 +865,12 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
                     disabled={locatingLostPoint}
                     className="inline-flex items-center justify-center rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-900 transition hover:bg-red-100 disabled:opacity-60"
                   >
-                    {locatingLostPoint ? 'Obteniendo ubicación...' : 'Usar mi ubicación actual'}
+                    {locatingLostPoint
+                      ? 'Obteniendo ubicación...'
+                      : 'Usar mi ubicación actual'}
                   </button>
 
-                  {(lostLat || lostLng) ? (
+                  {lostLat || lostLng ? (
                     <button
                       type="button"
                       onClick={handleClearLostLocation}
@@ -799,7 +882,9 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
                 </div>
 
                 {lostLocationStatus ? (
-                  <p className="mt-3 text-sm text-red-900">{lostLocationStatus}</p>
+                  <p className="mt-3 text-sm text-red-900">
+                    {lostLocationStatus}
+                  </p>
                 ) : null}
 
                 <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -817,55 +902,59 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
                 </div>
 
                 <p className="mt-3 text-xs leading-5 text-red-700">
-                  Si no guardas latitud y longitud, el mapa público del extravío no podrá mostrarse todavía.
+                  El mapa y la inteligencia de avistamientos se muestran en el
+                  dashboard del tutor, no en el perfil público.
                 </p>
               </div>
-              
+
               <div className="rounded-3xl border border-red-100 bg-white p-4">
-  <p className="text-sm font-semibold text-red-900">
-    Foto reciente para cartel y búsqueda
-  </p>
-  <p className="mt-1 text-sm leading-6 text-red-800">
-    Usa una foto clara y reciente de cómo se veía tu mascota al momento del extravío.
-    Esta imagen se mostrará en el cartel y en los materiales públicos de búsqueda.
-  </p>
+                <p className="text-sm font-semibold text-red-900">
+                  Foto reciente para cartel y búsqueda
+                </p>
 
-  <div className="mt-4 flex flex-wrap gap-2">
-    <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-900 transition hover:bg-red-50">
-      {uploadingPosterImage ? 'Subiendo foto...' : 'Subir foto reciente'}
-      <input
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={(e) =>
-          handleUploadLostPosterPhoto(e.target.files?.[0] || null)
-        }
-      />
-    </label>
+                <p className="mt-1 text-sm leading-6 text-red-800">
+                  Usa una foto clara y reciente de cómo se veía tu mascota al
+                  momento del extravío. Esta imagen se mostrará en el cartel y
+                  materiales públicos de búsqueda.
+                </p>
 
-    {posterImageUrl ? (
-      <button
-        type="button"
-        onClick={clearLostPosterPhoto}
-        className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-      >
-        Quitar foto reciente
-      </button>
-    ) : null}
-  </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <label className="inline-flex cursor-pointer items-center justify-center rounded-2xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-900 transition hover:bg-red-50">
+                    {uploadingPosterImage
+                      ? 'Comprimiendo y subiendo...'
+                      : 'Subir foto reciente'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) =>
+                        handleUploadLostPosterPhoto(e.target.files?.[0] || null)
+                      }
+                    />
+                  </label>
 
-  {posterImageUrl ? (
-    <div className="mt-4 overflow-hidden rounded-3xl border border-neutral-200 bg-neutral-50">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={posterImageUrl}
-        alt="Foto reciente para búsqueda"
-        className="h-64 w-full object-cover"
-      />
-    </div>
-  ) : null}
-</div>
+                  {posterImageUrl ? (
+                    <button
+                      type="button"
+                      onClick={clearLostPosterPhoto}
+                      className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                    >
+                      Quitar foto reciente
+                    </button>
+                  ) : null}
+                </div>
 
+                {posterImageUrl ? (
+                  <div className="mt-4 overflow-hidden rounded-3xl border border-neutral-200 bg-neutral-50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={posterImageUrl}
+                      alt="Foto reciente para búsqueda"
+                      className="h-64 w-full object-cover"
+                    />
+                  </div>
+                ) : null}
+              </div>
 
               <Field label="Recompensa (opcional)">
                 <InputLike value={rewardText} onChange={setRewardText} />
@@ -893,22 +982,34 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
             </div>
           ) : (
             <p className="text-sm text-neutral-600">
-              Cuando actives este modo, la mascota se mostrará como extraviada en el perfil público.
+              Cuando actives este modo, la mascota se mostrará como extraviada
+              en el perfil público.
             </p>
           )}
         </div>
       </SectionCard>
 
-      <SectionCard title="Información médica">
+      <SectionCard title="Información médica importante">
         <Field label="Alertas médicas públicas">
           <textarea
             value={medicalAlerts}
             onChange={(e) => setMedicalAlerts(e.target.value)}
             rows={4}
             className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none focus:border-neutral-500"
-            placeholder="Alergias, medicamentos, condiciones importantes..."
+            placeholder="Ej. Alergia a penicilina, epilepsia, requiere medicamento diario, no administrar ciertos alimentos..."
           />
         </Field>
+
+        <div className="mt-4 rounded-3xl border border-amber-100 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">
+            Esta información puede mostrarse en el perfil público
+          </p>
+          <p className="mt-2 text-sm leading-6 text-amber-800">
+            Úsala solo para datos críticos que ayuden a proteger a tu mascota en
+            caso de extravío o emergencia. Puedes activar o desactivar su
+            visibilidad en privacidad pública.
+          </p>
+        </div>
       </SectionCard>
 
       <SectionCard title="Veterinaria relacionada">
@@ -916,12 +1017,15 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
           <Field label="Clínica">
             <InputLike value={clinicName} onChange={setClinicName} />
           </Field>
+
           <Field label="Teléfono">
             <InputLike value={vetPhone} onChange={setVetPhone} />
           </Field>
+
           <Field label="Estado">
             <InputLike value={vetState} onChange={setVetState} />
           </Field>
+
           <Field label="Municipio">
             <InputLike value={vetMunicipality} onChange={setVetMunicipality} />
           </Field>
@@ -930,22 +1034,87 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
 
       <SectionCard title="Privacidad pública">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Toggle label="Mostrar nombre" checked={showPetName} onChange={setShowPetName} />
-          <Toggle label="Mostrar foto" checked={showProfilePhoto} onChange={setShowProfilePhoto} />
-          <Toggle label="Mostrar especie" checked={showSpecies} onChange={setShowSpecies} />
-          <Toggle label="Mostrar raza" checked={showBreed} onChange={setShowBreed} />
-          <Toggle label="Mostrar sexo" checked={showSex} onChange={setShowSex} />
-          <Toggle label="Mostrar edad" checked={showAge} onChange={setShowAge} />
-          <Toggle label="Mostrar microchip / ID" checked={showMicrochip} onChange={setShowMicrochip} />
-          <Toggle label="Mostrar alertas médicas" checked={showMedicalAlerts} onChange={setShowMedicalAlerts} />
-          <Toggle label="Mostrar teléfono" checked={showPrimaryTutorPhone} onChange={setShowPrimaryTutorPhone} />
-          <Toggle label="Mostrar botón WhatsApp" checked={showWhatsappButton} onChange={setShowWhatsappButton} />
+          <Toggle
+            label="Mostrar nombre"
+            checked={showPetName}
+            onChange={setShowPetName}
+          />
+          <Toggle
+            label="Mostrar foto"
+            checked={showProfilePhoto}
+            onChange={setShowProfilePhoto}
+          />
+          <Toggle
+            label="Mostrar especie"
+            checked={showSpecies}
+            onChange={setShowSpecies}
+          />
+          <Toggle
+            label="Mostrar raza"
+            checked={showBreed}
+            onChange={setShowBreed}
+          />
+          <Toggle
+            label="Mostrar sexo"
+            checked={showSex}
+            onChange={setShowSex}
+          />
+          <Toggle
+            label="Mostrar edad"
+            checked={showAge}
+            onChange={setShowAge}
+          />
+          <Toggle
+            label="Mostrar microchip / ID"
+            checked={showMicrochip}
+            onChange={setShowMicrochip}
+          />
+          <Toggle
+            label="Mostrar alertas médicas"
+            checked={showMedicalAlerts}
+            onChange={setShowMedicalAlerts}
+          />
+          <Toggle
+            label="Mostrar teléfono"
+            checked={showPrimaryTutorPhone}
+            onChange={setShowPrimaryTutorPhone}
+          />
+          <Toggle
+            label="Mostrar botón WhatsApp"
+            checked={showWhatsappButton}
+            onChange={setShowWhatsappButton}
+          />
+          <Toggle
+            label="Mostrar contactos de emergencia"
+            checked={showEmergencyContacts}
+            onChange={setShowEmergencyContacts}
+          />
+          <Toggle
+            label="Mostrar última ubicación textual si está extraviada"
+            checked={showLastSeenInfoWhenLost}
+            onChange={setShowLastSeenInfoWhenLost}
+          />
+          <Toggle
+            label="Reservar mapa solo para dashboard"
+            checked={!showMapWhenLost}
+            onChange={(value) => setShowMapWhenLost(!value)}
+          />
         </div>
       </SectionCard>
 
       <div className="rounded-[28px] border border-white/70 bg-white/95 p-5 shadow-lg">
         {message ? (
-          <p className="mb-4 text-sm text-neutral-700">{message}</p>
+          <p
+            className={`mb-4 rounded-2xl border p-4 text-sm leading-6 ${
+              messageTone === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : messageTone === 'error'
+                  ? 'border-red-200 bg-red-50 text-red-700'
+                  : 'border-neutral-200 bg-neutral-50 text-neutral-700'
+            }`}
+          >
+            {message}
+          </p>
         ) : null}
 
         <div className="flex flex-wrap gap-3">
@@ -1026,13 +1195,13 @@ function Toggle({
   onChange: (value: boolean) => void
 }) {
   return (
-    <label className="flex items-center justify-between rounded-2xl border border-neutral-200 bg-neutral-50/80 px-4 py-3">
+    <label className="flex items-center justify-between gap-4 rounded-2xl border border-neutral-200 bg-neutral-50/80 px-4 py-3">
       <span className="text-sm text-neutral-800">{label}</span>
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4"
+        className="h-4 w-4 shrink-0"
       />
     </label>
   )
@@ -1041,6 +1210,23 @@ function Toggle({
 function toDatetimeLocal(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ''
+
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function cleanText(value: string) {
+  const text = value.trim()
+  return text.length > 0 ? text : null
+}
+
+function getSafeExtension(fileName: string) {
+  const ext = fileName.split('.').pop()?.toLowerCase()
+
+  if (!ext || ext.length > 8) return 'jpg'
+
+  return ext.replace(/[^a-z0-9]/g, '') || 'jpg'
 }
