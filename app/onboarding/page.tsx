@@ -1,14 +1,15 @@
 'use client'
 
-import { ChangeEvent, FormEvent, useEffect, useState } from 'react'
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { compressImageFile } from '@/lib/image-compression'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import MexicoLocationSelect from '@/components/location/mexico-location-select'
-import { compressImageFile } from '@/lib/image-compression'
 
 type Profile = {
   id: string
@@ -25,7 +26,7 @@ type Profile = {
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -152,14 +153,14 @@ export default function OnboardingPage() {
       return
     }
 
-    if (hasMicrochip && normalizedMicrochip !== normalizedConfirmMicrochip) {
-      setMessage('Los números de microchip no coinciden.')
+    if (hasMicrochip && !normalizedMicrochip) {
+      setMessage('Escribe el número de microchip.')
       setSaving(false)
       return
     }
 
-    if (hasMicrochip && !normalizedMicrochip) {
-      setMessage('Escribe el número de microchip.')
+    if (hasMicrochip && normalizedMicrochip !== normalizedConfirmMicrochip) {
+      setMessage('Los números de microchip no coinciden.')
       setSaving(false)
       return
     }
@@ -167,35 +168,35 @@ export default function OnboardingPage() {
     let coverPhotoUrl: string | null = null
 
     if (petPhotos.length > 0) {
-  const firstPhoto = await compressImageFile(petPhotos[0], {
-    maxWidth: 1800,
-    maxHeight: 1800,
-    quality: 0.84,
-    outputType: 'image/webp',
-  })
+      const firstPhoto = await compressImageFile(petPhotos[0], {
+        maxWidth: 1800,
+        maxHeight: 1800,
+        quality: 0.84,
+        outputType: 'image/webp',
+      })
 
-  const fileExt = getSafeExtension(firstPhoto.name)
-  const filePath = `${profile.id}/${Date.now()}-cover.${fileExt}`
+      const fileExt = getSafeExtension(firstPhoto.name)
+      const filePath = `${profile.id}/${Date.now()}-cover.${fileExt}`
 
-  const { error: uploadError } = await supabase.storage
-    .from('pet-photos')
-    .upload(filePath, firstPhoto, {
-      upsert: false,
-      contentType: firstPhoto.type || undefined,
-    })
+      const { error: uploadError } = await supabase.storage
+        .from('pet-photos')
+        .upload(filePath, firstPhoto, {
+          upsert: false,
+          contentType: firstPhoto.type || undefined,
+        })
 
-  if (uploadError) {
-    setMessage(uploadError.message)
-    setSaving(false)
-    return
-  }
+      if (uploadError) {
+        setMessage(uploadError.message)
+        setSaving(false)
+        return
+      }
 
-  const { data: publicUrlData } = supabase.storage
-    .from('pet-photos')
-    .getPublicUrl(filePath)
+      const { data: publicUrlData } = supabase.storage
+        .from('pet-photos')
+        .getPublicUrl(filePath)
 
-  coverPhotoUrl = publicUrlData.publicUrl
-}
+      coverPhotoUrl = publicUrlData.publicUrl
+    }
 
     const { data: petData, error: petError } = await supabase.rpc(
       'create_pet_with_defaults',
@@ -243,39 +244,39 @@ export default function OnboardingPage() {
     }
 
     if (petPhotos.length > 1) {
-  for (let i = 1; i < petPhotos.length; i++) {
-    const photo = await compressImageFile(petPhotos[i], {
-      maxWidth: 1800,
-      maxHeight: 1800,
-      quality: 0.82,
-      outputType: 'image/webp',
-    })
+      for (let i = 1; i < petPhotos.length; i++) {
+        const photo = await compressImageFile(petPhotos[i], {
+          maxWidth: 1800,
+          maxHeight: 1800,
+          quality: 0.82,
+          outputType: 'image/webp',
+        })
 
-    const fileExt = getSafeExtension(photo.name)
-    const filePath = `${profile.id}/${Date.now()}-${i}.${fileExt}`
+        const fileExt = getSafeExtension(photo.name)
+        const filePath = `${profile.id}/${Date.now()}-${i}.${fileExt}`
 
-    const { error: uploadError } = await supabase.storage
-      .from('pet-photos')
-      .upload(filePath, photo, {
-        upsert: false,
-        contentType: photo.type || undefined,
-      })
+        const { error: uploadError } = await supabase.storage
+          .from('pet-photos')
+          .upload(filePath, photo, {
+            upsert: false,
+            contentType: photo.type || undefined,
+          })
 
-    if (!uploadError) {
-      const { data: publicUrlData } = supabase.storage
-        .from('pet-photos')
-        .getPublicUrl(filePath)
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage
+            .from('pet-photos')
+            .getPublicUrl(filePath)
 
-      await supabase.from('pet_photos').insert({
-        pet_id: createdPet.id,
-        uploaded_by_profile_id: profile.id,
-        file_url: publicUrlData.publicUrl,
-        is_cover: false,
-        sort_order: i,
-      })
+          await supabase.from('pet_photos').insert({
+            pet_id: createdPet.id,
+            uploaded_by_profile_id: profile.id,
+            file_url: publicUrlData.publicUrl,
+            is_cover: false,
+            sort_order: i,
+          })
+        }
+      }
     }
-  }
-}
 
     const hasVetData =
       vetClinicName.trim() ||
@@ -423,14 +424,30 @@ export default function OnboardingPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-3xl border border-sky-100 bg-sky-50 p-4">
-                    <p className="text-sm font-semibold text-sky-950">
-                      RAMX generará un ID interno
+                  <div className="rounded-3xl border border-orange-200 bg-[linear-gradient(135deg,#fff7ed_0%,#eff6ff_62%,#ffffff_100%)] p-5 shadow-sm">
+                    <p className="text-sm font-semibold text-orange-950">
+                      RAMX generará un ID interno para tu mascota
                     </p>
-                    <p className="mt-1 text-sm leading-6 text-sky-800">
-                      Podrás usar ese ID para el perfil público, QR o placa
-                      mientras decides si más adelante agregas microchip.
+
+                    <p className="mt-2 text-sm leading-6 text-orange-900">
+                      Aunque todavía no tenga microchip, podrás crear su perfil
+                      público y usarlo con un QR o una placa RAMX. Es una forma
+                      sencilla de empezar a protegerla desde hoy.
                     </p>
+
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <Link
+                        href="/tienda"
+                        className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-neutral-800 hover:shadow-md"
+                      >
+                        Ver placas QR/NFC
+                      </Link>
+
+                      <p className="text-xs leading-5 text-neutral-500 sm:max-w-xs">
+                        Comprar microchip y placas conectadas al perfil
+                        digital de tu mascota.
+                      </p>
+                    </div>
                   </div>
                 )}
               </section>
@@ -484,6 +501,7 @@ export default function OnboardingPage() {
 
                   <div className="space-y-2">
                     <Label>¿Mascota esterilizada?</Label>
+
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Button
                         type="button"
@@ -541,7 +559,7 @@ export default function OnboardingPage() {
                   />
                   <p className="text-xs leading-5 text-neutral-500">
                     Puedes subir hasta 5 fotos. La primera será usada como foto
-                    principal.
+                    principal y se optimizará automáticamente.
                   </p>
                 </div>
               </section>
