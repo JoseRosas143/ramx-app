@@ -18,7 +18,12 @@ const RAMX_INSTAGRAM_URL = 'https://www.instagram.com/ramx.bonica'
 const WHATSAPP_URL =
   'https://wa.me/522321416236?text=Hola%20RAMX%2C%20quiero%20informaci%C3%B3n%20sobre%20el%20registro%20digital%20para%20mascotas.'
 
-export default function HomePage() {
+
+const NINA_MEMORY_IMAGE_URL =
+  'https://esxkbfyphnthqcxfpkte.supabase.co/storage/v1/object/public/Brand%20kit/374FF5FE-2437-4FD8-9947-D3DB2DEED4CE.png'
+
+
+  export default function HomePage() {
   const router = useRouter()
   const [search, setSearch] = useState('')
 const [searching, setSearching] = useState(false)
@@ -428,40 +433,81 @@ const [searchMessage, setSearchMessage] = useState('')
         </section>
 
         <section className="py-14">
-          <div className="rounded-[40px] border border-neutral-900 bg-neutral-950 p-6 text-center text-white shadow-2xl shadow-neutral-950/20 sm:p-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-200">
-              En memoria de Niña
-            </p>
+  <div className="relative overflow-hidden rounded-[44px] border border-white/80 bg-[linear-gradient(135deg,#111827_0%,#1f2937_46%,#fb923c_100%)] p-5 text-white shadow-2xl shadow-neutral-950/20 sm:p-8 lg:p-10">
+    <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-orange-300/30 blur-3xl" />
+    <div className="pointer-events-none absolute -bottom-28 right-[-8%] h-80 w-80 rounded-full bg-sky-300/20 blur-3xl" />
+    <div className="pointer-events-none absolute left-[38%] top-[22%] h-60 w-60 rounded-full bg-rose-300/20 blur-3xl" />
 
-            <h2 className="mx-auto mt-4 max-w-3xl text-4xl font-semibold tracking-[-0.055em] sm:text-5xl">
-              Una historia que se convirtió en propósito.
-            </h2>
+    <div className="relative grid gap-8 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
+      <div className="order-2 lg:order-1">
+        <div className="inline-flex rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-orange-100 backdrop-blur">
+          En memoria de Niña
+        </div>
 
-            <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-neutral-300 sm:text-base">
-              RAMX nace en memoria de Niña, una perrita noble, obediente y muy
-              querida. Tenía ese espíritu curioso que, cuando sentía que era
-              momento de dar un pequeño paseo, encontraba la forma de salir a
-              explorar. De esa historia nació una herramienta para ayudar a que
-              más mascotas regresen a casa.
-            </p>
+        <h2 className="mt-5 max-w-2xl text-4xl font-semibold tracking-[-0.06em] text-white sm:text-5xl">
+          Una historia que se convirtió en propósito.
+        </h2>
 
-            <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-              <Link
-                href="/auth/register"
-                className="inline-flex items-center justify-center rounded-2xl bg-white px-6 py-4 text-sm font-semibold text-neutral-950 transition hover:-translate-y-0.5 hover:bg-orange-50"
-              >
-                Crear cuenta gratis
-              </Link>
+        <p className="mt-5 max-w-2xl text-sm leading-7 text-neutral-200 sm:text-base">
+          RAMX nace en memoria de Niña, una perrita noble, obediente y
+          profundamente querida. Tenía una forma muy especial de recordarnos que
+          también era libre, curiosa y aventurera: cuando sentía que era momento
+          de dar un pequeño paseo, encontraba la manera de salir a explorar por
+          su cuenta.
+        </p>
 
-              <Link
-                href="/tienda"
-                className="inline-flex items-center justify-center rounded-2xl border border-white/20 px-6 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-white/10"
-              >
-                Ver tienda RAMX
-              </Link>
+        <p className="mt-4 max-w-2xl text-sm leading-7 text-neutral-200 sm:text-base">
+          De esa mezcla de amor, cuidado y preocupación nació la idea de crear
+          una herramienta bonita, práctica y confiable para que más familias
+          puedan proteger a quienes también son parte de casa.
+        </p>
+
+        <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+          <Link
+            href="/auth/register"
+            className="inline-flex items-center justify-center rounded-2xl bg-white px-6 py-4 text-sm font-semibold text-neutral-950 transition hover:-translate-y-0.5 hover:bg-orange-50"
+          >
+            Registrar mi mascota
+          </Link>
+
+          <Link
+            href="/tienda"
+            className="inline-flex items-center justify-center rounded-2xl border border-white/20 px-6 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-white/10"
+          >
+            Ver placas RAMX
+          </Link>
+        </div>
+      </div>
+
+      <div className="order-1 lg:order-2">
+        <div className="relative mx-auto max-w-md">
+          <div className="absolute -inset-4 rounded-[42px] bg-white/10 blur-2xl" />
+
+          <div className="relative overflow-hidden rounded-[38px] border border-white/20 bg-white/10 p-3 shadow-2xl backdrop-blur-xl">
+            <div className="overflow-hidden rounded-[30px] bg-neutral-950">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={NINA_MEMORY_IMAGE_URL}
+                alt="Niña, inspiración de RAMX"
+                className="h-auto w-full object-cover"
+              />
+            </div>
+
+            <div className="mt-3 rounded-[26px] border border-white/15 bg-white/10 p-4 backdrop-blur">
+              <p className="text-sm font-semibold text-white">
+                Niña · Inspiración RAMX
+              </p>
+              <p className="mt-1 text-xs leading-5 text-orange-50/85">
+                Una forma de honrar su memoria ayudando a que más mascotas
+                regresen a casa.
+              </p>
             </div>
           </div>
-        </section>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
         <section className="grid gap-4 pb-14 md:grid-cols-3">
           <TrustStat value="QR" label="Perfil público listo para compartir" />
