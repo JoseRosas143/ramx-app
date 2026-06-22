@@ -246,7 +246,7 @@ export default async function PublicPetPage({ params }: PageProps) {
           </section>
         ) : null}
 
-        
+  
 
         {isLost ? (
           <LostPetPoster
