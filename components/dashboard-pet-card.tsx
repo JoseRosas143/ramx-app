@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import LostPetMap from '@/components/maps/lost-pet-map-dynamic'
+import PublicProfileQrCard from '@/components/pets/public-profile-qr-card'
 import { markPetRecoveredAction } from '@/app/dashboard/actions'
 
 type DashboardSighting = {
@@ -124,6 +125,25 @@ export default function DashboardPetCard({ pet }: { pet: Pet }) {
           />
         </div>
 
+        {pet.public_slug ? (
+          <PublicProfileQrCard
+            petName={pet.name}
+            publicSlug={pet.public_slug}
+            identifier={pet.microchip_number || pet.internal_id}
+            photoUrl={pet.profile_photo_url}
+          />
+        ) : (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-amber-950">
+              QR público no disponible todavía
+            </p>
+            <p className="mt-1 text-sm leading-6 text-amber-800">
+              Esta mascota aún no tiene slug público. Revisa que tenga microchip
+              o ID interno asignado.
+            </p>
+          </div>
+        )}
+
         {isCurrentlyLost ? (
           <div className="space-y-4 rounded-3xl border border-amber-200 bg-amber-50 p-4">
             <div>
@@ -194,7 +214,8 @@ export default function DashboardPetCard({ pet }: { pet: Pet }) {
                   Aún no hay punto base para mostrar mapa.
                 </p>
                 <p className="mt-1 text-sm leading-6 text-amber-800">
-                  Entra a editar perfil, activa modo extraviado y guarda latitud/longitud en la ubicación base.
+                  Entra a editar perfil, activa modo extraviado y guarda
+                  latitud/longitud en la ubicación base.
                 </p>
               </div>
             )}
