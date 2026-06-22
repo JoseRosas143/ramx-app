@@ -44,13 +44,8 @@ export async function sendMedicalReminderEmail({
 }: ReminderEmailInput) {
   const transporter = getTransporter()
 
-const from = process.env.SMTP_FROM
-const fromEmail = process.env.SMTP_FROM_EMAIL
-const fromName = process.env.SMTP_FROM_NAME || 'RAMX'
-
-if (!from && !fromEmail) {
-  throw new Error('Falta SMTP_FROM o SMTP_FROM_EMAIL.')
-}
+  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER
+  const fromName = process.env.SMTP_FROM_NAME || 'RAMX'
 
   const html = `
   <div style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">

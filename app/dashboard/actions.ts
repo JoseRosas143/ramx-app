@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const ALLOWED_STATUSES = ['new', 'reviewed', 'resolved', 'archived'] as const
 type AllowedStatus = (typeof ALLOWED_STATUSES)[number]
@@ -59,6 +60,7 @@ export async function updateSightingStatusAction(formData: FormData) {
   }
 
   revalidatePath('/dashboard')
+
   if (pet.public_slug) {
     revalidatePath(`/p/${pet.public_slug}`)
   }
@@ -82,20 +84,26 @@ export async function markPetRecoveredAction(formData: FormData) {
     throw new Error('No se pudo validar la sesión del usuario.')
   }
 
-  const { data: pet, error: petError } = await supabase
+  const admin = createAdminClient()
+
+  const { data: pet, error: petError } = await admin
     .from('pets')
     .select('id, public_slug, primary_tutor_profile_id, status')
     .eq('id', petId)
-    .eq('primary_tutor_profile_id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (petError || !pet) {
+  if (petError) {
+    console.error('Error buscando mascota:', petError)
+    throw new Error(`No se pudo validar la mascota: ${petError.message}`)
+  }
+
+  if (!pet || pet.primary_tutor_profile_id !== user.id) {
     throw new Error('No se encontró la mascota o no tienes permisos.')
   }
 
   const now = new Date().toISOString()
 
-  const { error: closeLostReportError } = await supabase
+  const { error: closeLostReportError } = await admin
     .from('lost_reports')
     .update({
       status: 'closed',
@@ -111,13 +119,12 @@ export async function markPetRecoveredAction(formData: FormData) {
     )
   }
 
-  const { error: petUpdateError } = await supabase
+  const { error: petUpdateError } = await admin
     .from('pets')
     .update({
       status: 'active',
     })
     .eq('id', petId)
-    .eq('primary_tutor_profile_id', user.id)
 
   if (petUpdateError) {
     console.error('Error actualizando mascota:', petUpdateError)
@@ -176,6 +183,7 @@ export async function markNotificationReadAction(formData: FormData) {
 
   revalidatePath('/dashboard')
 }
+
 export async function archiveNotificationAction(formData: FormData) {
   const notificationId = String(formData.get('notificationId') || '')
 

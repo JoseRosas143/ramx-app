@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { updatePetMainProfileAction } from './actions'
 
 type Photo = {
   id: string
@@ -306,30 +307,35 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     setSaving(true)
     setMessage('')
 
-    const coverUrl =
-      photos.find((photo) => photo.is_cover)?.file_url || photos[0]?.file_url || null
-
-    const { error: petError } = await supabase
-      .from('pets')
-      .update({
-        name,
-        species,
-        breed,
-        sex,
-        color,
-        birth_date: birthDate || null,
-        microchip_number: microchipNumber || null,
-        medical_alerts: medicalAlerts || null,
-        profile_photo_url: coverUrl,
-        status: isLostMode ? 'lost' : 'active',
-      })
-      .eq('id', pet.id)
-
-    if (petError) {
-      setMessage(petError.message)
+    if (!profileId) {
+      setMessage('No se pudo identificar al usuario actual. Vuelve a iniciar sesión.')
       setSaving(false)
       return
     }
+
+    const coverUrl =
+      photos.find((photo) => photo.is_cover)?.file_url || photos[0]?.file_url || null
+
+    const petUpdateResult = await updatePetMainProfileAction(pet.id, {
+      name,
+      species,
+      breed,
+      sex,
+      color,
+      birthDate,
+      microchipNumber,
+      medicalAlerts,
+      profilePhotoUrl: coverUrl,
+      status: isLostMode ? 'lost' : 'active',
+    })
+
+    if (!petUpdateResult.ok) {
+      setMessage(petUpdateResult.message)
+      setSaving(false)
+      return
+    }
+
+    setMedicalAlerts(petUpdateResult.medical_alerts || '')
 
     const { error: settingsError } = await supabase
       .from('pet_public_settings')
@@ -481,13 +487,6 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
         return
       }
     }
-
-    await supabase
-      .from('pets')
-      .update({
-        status: isLostMode ? 'lost' : 'active',
-      })
-      .eq('id', pet.id)
 
     setMessage('Perfil actualizado correctamente.')
     setSaving(false)

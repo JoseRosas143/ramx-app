@@ -2,9 +2,7 @@ import { notFound } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { getPublicPetBySlug } from '@/lib/pets'
 import PublicPetGallery from '@/components/public-pet-gallery'
-import LostPetMap from '@/components/maps/lost-pet-map-dynamic'
 import LostPetPoster from '@/components/posters/lost-pet-poster'
-import PublicSightingsPanel from '@/components/sightings/public-sightings-panel'
 
 type PageProps = {
   params: Promise<{
@@ -54,12 +52,7 @@ export default async function PublicPetPage({ params }: PageProps) {
     pet.photos?.[0]?.file_url ||
     null
 
-  const canShowMap =
-    isLost &&
-    typeof pet.active_lost_lat === 'number' &&
-    typeof pet.active_lost_lng === 'number'
 
-  const publicSightings = pet.map_sightings || []
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
@@ -253,22 +246,7 @@ export default async function PublicPetPage({ params }: PageProps) {
           </section>
         ) : null}
 
-        {canShowMap ? (
-          <LostPetMap
-            centerLat={pet.active_lost_lat}
-            centerLng={pet.active_lost_lng}
-            radiusKm={pet.active_radius_km}
-            petName={pet.name || 'esta mascota'}
-            sightings={publicSightings}
-          />
-        ) : null}
-
-        {isLost ? (
-          <PublicSightingsPanel
-            petName={pet.name || 'esta mascota'}
-            sightings={publicSightings}
-          />
-        ) : null}
+        
 
         {isLost ? (
           <LostPetPoster
