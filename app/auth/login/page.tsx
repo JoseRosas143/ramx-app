@@ -39,9 +39,9 @@ function LoginContent() {
   )
 
   const getResetRedirectTo = () => {
-    if (typeof window === 'undefined') return undefined
-    return `${window.location.origin}/auth/update-password`
-  }
+  if (typeof window === 'undefined') return undefined
+  return `${window.location.origin}/auth/callback?next=/auth/update-password`
+}
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
