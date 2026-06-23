@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function upsertMedicalProfileAction(formData: FormData) {
   const supabase = await createClient()
@@ -45,6 +46,17 @@ export async function upsertMedicalProfileAction(formData: FormData) {
     .upsert(payload, { onConflict: 'pet_id' })
 
   if (error) throw new Error(error.message)
+    if (weightRaw) {
+  await supabase
+    .from('pet_medical_profiles')
+    .upsert(
+      {
+        pet_id: petId,
+        weight_kg: Number(weightRaw),
+      },
+      { onConflict: 'pet_id' }
+    )
+}
 
   revalidatePath(`/dashboard/pets/${petId}/medical`)
 }
@@ -72,7 +84,7 @@ export async function addVaccinationAction(formData: FormData) {
 
   const { data: pet } = await supabase
     .from('pets')
-    .select('id')
+    .select('id, name')
     .eq('id', petId)
     .eq('primary_tutor_profile_id', user.id)
     .single()
@@ -103,21 +115,38 @@ export async function addVaccinationAction(formData: FormData) {
     throw new Error('Selecciona una vacuna o escribe una personalizada.')
   }
 
-  const { error } = await supabase.from('pet_vaccinations').insert({
-    pet_id: petId,
-    catalog_id: finalCatalogId,
-    vaccine_name: vaccineName,
-    brand,
-    applied_date: appliedDate,
-    next_due_date: nextDueDate,
-    batch_number: batchNumber,
-    veterinarian_name: veterinarianName,
-    clinic_name: clinicName,
-    notes,
-    created_by_profile_id: user.id,
-  })
+  const { data: insertedVaccination, error } = await supabase
+    .from('pet_vaccinations')
+    .insert({
+      pet_id: petId,
+      catalog_id: finalCatalogId,
+      vaccine_name: vaccineName,
+      brand,
+      applied_date: appliedDate,
+      next_due_date: nextDueDate,
+      batch_number: batchNumber,
+      veterinarian_name: veterinarianName,
+      clinic_name: clinicName,
+      notes,
+      created_by_profile_id: user.id,
+    })
+    .select('id')
+    .single()
 
   if (error) throw new Error(error.message)
+
+  if (nextDueDate && insertedVaccination?.id) {
+    await createMedicalReminder({
+      petId,
+      recipientProfileId: user.id,
+      petName: pet.name,
+      sourceTable: 'pet_vaccinations',
+      sourceId: insertedVaccination.id,
+      reminderKind: 'vaccination_due',
+      itemName: vaccineName,
+      nextDueDate,
+    })
+  }
 
   revalidatePath(`/dashboard/pets/${petId}/medical`)
 }
@@ -145,7 +174,7 @@ export async function addDewormingAction(formData: FormData) {
 
   const { data: pet } = await supabase
     .from('pets')
-    .select('id')
+    .select('id, name')
     .eq('id', petId)
     .eq('primary_tutor_profile_id', user.id)
     .single()
@@ -178,24 +207,42 @@ export async function addDewormingAction(formData: FormData) {
     throw new Error('Selecciona un desparasitante o escribe uno personalizado.')
   }
 
-  const { error } = await supabase.from('pet_dewormings').insert({
-    pet_id: petId,
-    catalog_id: finalCatalogId,
-    dewormer_name: dewormerName,
-    brand,
-    category,
-    applied_date: appliedDate,
-    next_due_date: nextDueDate,
-    veterinarian_name: veterinarianName,
-    clinic_name: clinicName,
-    notes,
-    created_by_profile_id: user.id,
-  })
+  const { data: insertedDeworming, error } = await supabase
+    .from('pet_dewormings')
+    .insert({
+      pet_id: petId,
+      catalog_id: finalCatalogId,
+      dewormer_name: dewormerName,
+      brand,
+      category,
+      applied_date: appliedDate,
+      next_due_date: nextDueDate,
+      veterinarian_name: veterinarianName,
+      clinic_name: clinicName,
+      notes,
+      created_by_profile_id: user.id,
+    })
+    .select('id')
+    .single()
 
   if (error) throw new Error(error.message)
 
+  if (nextDueDate && insertedDeworming?.id) {
+    await createMedicalReminder({
+      petId,
+      recipientProfileId: user.id,
+      petName: pet.name,
+      sourceTable: 'pet_dewormings',
+      sourceId: insertedDeworming.id,
+      reminderKind: 'deworming_due',
+      itemName: dewormerName,
+      nextDueDate,
+    })
+  }
+
   revalidatePath(`/dashboard/pets/${petId}/medical`)
 }
+
 export async function addMedicalVisitAction(formData: FormData) {
   const supabase = await createClient()
 
@@ -241,9 +288,21 @@ export async function addMedicalVisitAction(formData: FormData) {
   })
 
   if (error) throw new Error(error.message)
+    if (weightRaw || temperatureRaw) {
+  await supabase
+    .from('pet_medical_profiles')
+    .upsert(
+      {
+        pet_id: petId,
+        weight_kg: weightRaw ? Number(weightRaw) : undefined,
+      },
+      { onConflict: 'pet_id' }
+    )
+}
 
   revalidatePath(`/dashboard/pets/${petId}/medical`)
 }
+
 export async function addMedicalDocumentAction(formData: FormData) {
   const supabase = await createClient()
 
@@ -359,7 +418,7 @@ export async function dismissMedicalReminderAction(formData: FormData) {
 
   const { data: reminder, error: reminderError } = await supabase
     .from('pet_reminders')
-    .select('id, pet_id, recipient_profile_id')
+    .select('id, pet_id, recipient_profile_id, meta')
     .eq('id', reminderId)
     .eq('recipient_profile_id', user.id)
     .single()
@@ -368,11 +427,19 @@ export async function dismissMedicalReminderAction(formData: FormData) {
     throw new Error('No se encontró el recordatorio o no tienes permiso.')
   }
 
+  const now = new Date().toISOString()
+  const currentMeta = getMetaObject(reminder.meta)
+
   const { error } = await supabase
     .from('pet_reminders')
     .update({
       status: 'dismissed',
-      dismissed_at: new Date().toISOString(),
+      dismissed_at: now,
+      meta: {
+        ...currentMeta,
+        resolved_action: 'dismissed',
+        dismissed_from_medical_panel_at: now,
+      },
     })
     .eq('id', reminderId)
     .eq('recipient_profile_id', user.id)
@@ -381,7 +448,386 @@ export async function dismissMedicalReminderAction(formData: FormData) {
     throw new Error(error.message)
   }
 
+  await supabase
+    .from('notifications')
+    .update({
+      is_read: true,
+      read_at: now,
+      archived_at: now,
+    })
+    .eq('recipient_profile_id', user.id)
+    .contains('meta', {
+      reminder_id: reminderId,
+    })
+
   revalidatePath(`/dashboard/pets/${reminder.pet_id}/medical`)
+  revalidatePath('/dashboard')
+}
+
+export async function markMedicalReminderAppliedAction(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('No autenticado.')
+
+  const reminderId = String(formData.get('reminder_id') || '')
+
+  if (!reminderId) {
+    throw new Error('Falta el recordatorio.')
+  }
+
+  const { data: reminder, error: reminderError } = await supabase
+    .from('pet_reminders')
+    .select('id, pet_id, recipient_profile_id, meta')
+    .eq('id', reminderId)
+    .eq('recipient_profile_id', user.id)
+    .single()
+
+  if (reminderError || !reminder) {
+    throw new Error('No se encontró el recordatorio o no tienes permiso.')
+  }
+
+  const now = new Date().toISOString()
+  const currentMeta = getMetaObject(reminder.meta)
+
+  const { error } = await supabase
+    .from('pet_reminders')
+    .update({
+      status: 'dismissed',
+      dismissed_at: now,
+      meta: {
+        ...currentMeta,
+        resolved_action: 'applied',
+        applied_from_reminder_at: now,
+      },
+    })
+    .eq('id', reminderId)
+    .eq('recipient_profile_id', user.id)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  await supabase
+    .from('notifications')
+    .update({
+      is_read: true,
+      read_at: now,
+      archived_at: now,
+    })
+    .eq('recipient_profile_id', user.id)
+    .contains('meta', {
+      reminder_id: reminderId,
+    })
+
+  revalidatePath(`/dashboard/pets/${reminder.pet_id}/medical`)
+  revalidatePath('/dashboard')
+}
+export async function deleteVaccinationAction(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('No autenticado.')
+
+  const vaccinationId = String(formData.get('record_id') || '')
+
+  if (!vaccinationId) {
+    throw new Error('Falta el registro de vacuna.')
+  }
+
+  const { data: vaccination, error: vaccinationError } = await supabase
+    .from('pet_vaccinations')
+    .select('id, pet_id')
+    .eq('id', vaccinationId)
+    .single()
+
+  if (vaccinationError || !vaccination) {
+    throw new Error('No se encontró la vacuna.')
+  }
+
+  const { data: pet } = await supabase
+    .from('pets')
+    .select('id')
+    .eq('id', vaccination.pet_id)
+    .eq('primary_tutor_profile_id', user.id)
+    .single()
+
+  if (!pet) {
+    throw new Error('No tienes permiso para eliminar este registro.')
+  }
+
+  const admin = createAdminClient()
+
+  await admin
+    .from('pet_reminders')
+    .delete()
+    .eq('source_table', 'pet_vaccinations')
+    .eq('source_id', vaccinationId)
+
+  const { error } = await admin
+    .from('pet_vaccinations')
+    .delete()
+    .eq('id', vaccinationId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath(`/dashboard/pets/${vaccination.pet_id}/medical`)
+  revalidatePath('/dashboard')
+}
+
+export async function deleteDewormingAction(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('No autenticado.')
+
+  const dewormingId = String(formData.get('record_id') || '')
+
+  if (!dewormingId) {
+    throw new Error('Falta el registro de desparasitación.')
+  }
+
+  const { data: deworming, error: dewormingError } = await supabase
+    .from('pet_dewormings')
+    .select('id, pet_id')
+    .eq('id', dewormingId)
+    .single()
+
+  if (dewormingError || !deworming) {
+    throw new Error('No se encontró la desparasitación.')
+  }
+
+  const { data: pet } = await supabase
+    .from('pets')
+    .select('id')
+    .eq('id', deworming.pet_id)
+    .eq('primary_tutor_profile_id', user.id)
+    .single()
+
+  if (!pet) {
+    throw new Error('No tienes permiso para eliminar este registro.')
+  }
+
+  const admin = createAdminClient()
+
+  await admin
+    .from('pet_reminders')
+    .delete()
+    .eq('source_table', 'pet_dewormings')
+    .eq('source_id', dewormingId)
+
+  const { error } = await admin
+    .from('pet_dewormings')
+    .delete()
+    .eq('id', dewormingId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath(`/dashboard/pets/${deworming.pet_id}/medical`)
+  revalidatePath('/dashboard')
+}
+
+export async function deleteMedicalVisitAction(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('No autenticado.')
+
+  const visitId = String(formData.get('record_id') || '')
+
+  if (!visitId) {
+    throw new Error('Falta la consulta clínica.')
+  }
+
+  const { data: visit, error: visitError } = await supabase
+    .from('pet_medical_visits')
+    .select('id, pet_id')
+    .eq('id', visitId)
+    .single()
+
+  if (visitError || !visit) {
+    throw new Error('No se encontró la consulta.')
+  }
+
+  const { data: pet } = await supabase
+    .from('pets')
+    .select('id')
+    .eq('id', visit.pet_id)
+    .eq('primary_tutor_profile_id', user.id)
+    .single()
+
+  if (!pet) {
+    throw new Error('No tienes permiso para eliminar esta consulta.')
+  }
+
+  const admin = createAdminClient()
+
+  const { error } = await admin
+    .from('pet_medical_visits')
+    .delete()
+    .eq('id', visitId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath(`/dashboard/pets/${visit.pet_id}/medical`)
+}
+
+export async function updateMedicalDocumentAction(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('No autenticado.')
+
+  const documentId = String(formData.get('document_id') || '')
+  const documentType = String(formData.get('document_type') || '').trim()
+  const title = String(formData.get('title') || '').trim()
+  const notes = clean(formData.get('notes'))
+
+  if (!documentId || !documentType || !title) {
+    throw new Error('Faltan datos del documento.')
+  }
+
+  const { data: document, error: documentError } = await supabase
+    .from('pet_medical_documents')
+    .select('id, pet_id')
+    .eq('id', documentId)
+    .single()
+
+  if (documentError || !document) {
+    throw new Error('No se encontró el documento.')
+  }
+
+  const { data: pet } = await supabase
+    .from('pets')
+    .select('id')
+    .eq('id', document.pet_id)
+    .eq('primary_tutor_profile_id', user.id)
+    .single()
+
+  if (!pet) {
+    throw new Error('No tienes permiso para editar este documento.')
+  }
+
+  const { error } = await supabase
+    .from('pet_medical_documents')
+    .update({
+      document_type: documentType,
+      title,
+      notes,
+    })
+    .eq('id', documentId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  revalidatePath(`/dashboard/pets/${document.pet_id}/medical`)
+}
+
+type MedicalReminderKind = 'vaccination_due' | 'deworming_due'
+
+type CreateMedicalReminderInput = {
+  petId: string
+  recipientProfileId: string
+  petName: string
+  sourceTable: 'pet_vaccinations' | 'pet_dewormings'
+  sourceId: string
+  reminderKind: MedicalReminderKind
+  itemName: string
+  nextDueDate: string
+}
+
+async function createMedicalReminder({
+  petId,
+  recipientProfileId,
+  petName,
+  sourceTable,
+  sourceId,
+  reminderKind,
+  itemName,
+  nextDueDate,
+}: CreateMedicalReminderInput) {
+  const dueDate = normalizeDate(nextDueDate)
+
+  if (!dueDate) return
+
+  const admin = createAdminClient()
+  const reminderDate = subtractDays(dueDate, 7)
+  const isVaccine = reminderKind === 'vaccination_due'
+
+  const title = isVaccine
+    ? `Vacuna próxima para ${petName}`
+    : `Desparasitación próxima para ${petName}`
+
+  const body = isVaccine
+    ? `${petName} tiene programada la próxima vacuna: ${itemName}.`
+    : `${petName} tiene programada la próxima desparasitación: ${itemName}.`
+
+  const { error } = await admin.from('pet_reminders').insert({
+    pet_id: petId,
+    recipient_profile_id: recipientProfileId,
+    reminder_kind: reminderKind,
+    title,
+    body,
+    due_date: dueDate,
+    reminder_date: reminderDate,
+    status: 'pending',
+    source_table: sourceTable,
+    source_id: sourceId,
+    meta: {
+      item_name: itemName,
+      created_from: 'medical_record',
+      reminder_days_before: 7,
+    },
+  })
+
+  if (error) {
+    console.error('RAMX create medical reminder error:', error.message)
+  }
+}
+
+function normalizeDate(value: string) {
+  const date = new Date(`${value}T00:00:00`)
+
+  if (Number.isNaN(date.getTime())) return null
+
+  return date.toISOString().slice(0, 10)
+}
+
+function subtractDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`)
+  date.setDate(date.getDate() - days)
+
+  return date.toISOString().slice(0, 10)
+}
+
+function getMetaObject(value: unknown) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+
+  return {}
 }
 
 function clean(value: FormDataEntryValue | null) {

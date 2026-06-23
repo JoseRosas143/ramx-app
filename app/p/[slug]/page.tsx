@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { getPublicPetBySlug } from '@/lib/pets'
 import PublicPetGallery from '@/components/public-pet-gallery'
+import PublicClinicalRecord from '@/components/pets/public-clinical-record'
 import LostPetPoster from '@/components/posters/lost-pet-poster'
 
 type PageProps = {
@@ -95,6 +96,8 @@ export default async function PublicPetPage({ params }: PageProps) {
                   </span>
                 ) : null}
               </div>
+
+              
 
               <h1 className="text-2xl font-semibold tracking-tight text-neutral-950 sm:text-3xl">
                 {pet.show_pet_name ? pet.name : 'Mascota registrada'}
@@ -341,18 +344,13 @@ export default async function PublicPetPage({ params }: PageProps) {
             </section>
           )}
         </section>
-
-        {pet.show_medical_alerts && pet.medical_alerts ? (
-          <section className="rounded-[28px] border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5 shadow-lg">
-            <h2 className="text-lg font-semibold text-amber-900">
-              Información médica importante
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-amber-800">
-              {pet.medical_alerts}
-            </p>
-          </section>
-        ) : null}
-      </div>
+<PublicClinicalRecord
+  petName={pet.show_pet_name ? pet.name : 'Mascota registrada'}
+  medicalAlerts={pet.medical_alerts}
+  showMedicalAlerts={pet.show_medical_alerts}
+  medical={pet.public_medical}
+/>
+        </div>
     </main>
   )
 }

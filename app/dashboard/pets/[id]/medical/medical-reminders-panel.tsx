@@ -2,7 +2,10 @@
 
 import { useTransition } from 'react'
 import Link from 'next/link'
-import { dismissMedicalReminderAction } from './actions'
+import {
+  dismissMedicalReminderAction,
+  markMedicalReminderAppliedAction,
+} from './actions'
 import { Button } from '@/components/ui/button'
 
 type Reminder = {
@@ -37,7 +40,8 @@ export default function MedicalRemindersPanel({
               Sin recordatorios pendientes
             </h2>
             <p className="mt-1 text-sm leading-6 text-emerald-800">
-              Las vacunas y desparasitaciones con próxima fecha aparecerán aquí automáticamente.
+              Las vacunas y desparasitaciones con próxima fecha aparecerán aquí
+              automáticamente.
             </p>
           </div>
         </div>
@@ -45,12 +49,21 @@ export default function MedicalRemindersPanel({
     )
   }
 
-  const urgent = reminders.filter((reminder) => getReminderTone(reminder.due_date) === 'overdue')
-  const soon = reminders.filter((reminder) => getReminderTone(reminder.due_date) === 'soon')
-  const upcoming = reminders.filter((reminder) => getReminderTone(reminder.due_date) === 'upcoming')
+  const urgent = reminders.filter(
+    (reminder) => getReminderTone(reminder.due_date) === 'overdue'
+  )
+  const soon = reminders.filter(
+    (reminder) => getReminderTone(reminder.due_date) === 'soon'
+  )
+  const upcoming = reminders.filter(
+    (reminder) => getReminderTone(reminder.due_date) === 'upcoming'
+  )
 
   return (
-    <section className="rounded-[32px] border border-amber-100 bg-gradient-to-br from-amber-50 via-orange-50 to-white p-5 shadow-lg sm:p-6">
+    <section
+      id="proximos-cuidados"
+      className="rounded-[32px] border border-amber-100 bg-gradient-to-br from-amber-50 via-orange-50 to-white p-5 shadow-lg sm:p-6"
+    >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
@@ -62,7 +75,8 @@ export default function MedicalRemindersPanel({
           </h2>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
-            Estos recordatorios se generan automáticamente desde la próxima fecha registrada en vacunas y desparasitación.
+            Estos recordatorios se generan automáticamente desde la próxima
+            fecha registrada en vacunas y desparasitación.
           </p>
         </div>
 
@@ -118,6 +132,21 @@ function ReminderCard({
         ? 'Desparasitación'
         : 'Recordatorio'
 
+  function handleApplied() {
+    const confirmed = window.confirm(
+      '¿Quieres marcar este cuidado como aplicado? El recordatorio dejará de aparecer como pendiente.'
+    )
+
+    if (!confirmed) return
+
+    const formData = new FormData()
+    formData.append('reminder_id', reminder.id)
+
+    startTransition(async () => {
+      await markMedicalReminderAppliedAction(formData)
+    })
+  }
+
   function handleDismiss() {
     const confirmed = window.confirm(
       '¿Quieres descartar este recordatorio? Ya no aparecerá como pendiente.'
@@ -167,11 +196,20 @@ function ReminderCard({
         </div>
 
         <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={handleApplied}
+            className="rounded-2xl bg-emerald-600 text-white hover:bg-emerald-700"
+          >
+            {pending ? 'Guardando...' : 'Aplicada'}
+          </Button>
+
           <Link
-            href={`/dashboard/pets/${petId}/medical`}
+            href={`/dashboard/pets/${petId}/medical#registrar-cuidados`}
             className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
           >
-            Ver expediente
+            Registrar detalle
           </Link>
 
           <Button

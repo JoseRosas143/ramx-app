@@ -1,8 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  deleteDewormingAction,
+  deleteMedicalVisitAction,
+  deleteVaccinationAction,
+} from './actions'
 
 type Field = {
   label: string
@@ -18,16 +23,50 @@ type MedicalRecord = {
   fields: Field[]
 }
 
+type RecordType = 'vaccination' | 'deworming' | 'visit'
+
 export default function MedicalRecordList({
   title,
   emptyText,
   records,
+  recordType,
 }: {
   title: string
   emptyText: string
   records: MedicalRecord[]
+  recordType?: RecordType
 }) {
   const [selected, setSelected] = useState<MedicalRecord | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  function handleDelete(record: MedicalRecord) {
+    if (!recordType) return
+
+    const confirmed = window.confirm(
+      `¿Seguro que quieres eliminar "${record.title}"? Esta acción no se puede deshacer.`
+    )
+
+    if (!confirmed) return
+
+    const formData = new FormData()
+    formData.append('record_id', record.id)
+
+    startTransition(async () => {
+      if (recordType === 'vaccination') {
+        await deleteVaccinationAction(formData)
+      }
+
+      if (recordType === 'deworming') {
+        await deleteDewormingAction(formData)
+      }
+
+      if (recordType === 'visit') {
+        await deleteMedicalVisitAction(formData)
+      }
+
+      setSelected(null)
+    })
+  }
 
   return (
     <>
@@ -115,7 +154,12 @@ export default function MedicalRecordList({
 
             <div className="mt-6 grid gap-3 sm:grid-cols-2">
               {selected.fields
-                .filter((field) => field.value !== null && field.value !== undefined && String(field.value).trim() !== '')
+                .filter(
+                  (field) =>
+                    field.value !== null &&
+                    field.value !== undefined &&
+                    String(field.value).trim() !== ''
+                )
                 .map((field) => (
                   <div
                     key={field.label}
@@ -130,6 +174,28 @@ export default function MedicalRecordList({
                   </div>
                 ))}
             </div>
+
+            {recordType ? (
+              <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-neutral-200 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-2xl"
+                  onClick={() => setSelected(null)}
+                >
+                  Cancelar
+                </Button>
+
+                <Button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => handleDelete(selected)}
+                  className="rounded-2xl bg-red-600 text-white hover:bg-red-700"
+                >
+                  {pending ? 'Eliminando...' : 'Eliminar registro'}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}

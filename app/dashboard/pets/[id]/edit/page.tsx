@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTutorPetById } from '@/lib/pet-edit'
 import EditPetForm from './pet-form'
-import { ensureWelcomeEmailSent } from '@/lib/welcome-email'
+
 
 type PageProps = {
   params: Promise<{
