@@ -745,6 +745,343 @@ export async function updateMedicalDocumentAction(formData: FormData) {
   revalidatePath(`/dashboard/pets/${document.pet_id}/medical`)
 }
 
+export async function updateVaccinationAction(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('No autenticado.')
+
+  const vaccinationId = String(formData.get('record_id') || '')
+  const vaccineName = String(formData.get('vaccine_name') || '').trim()
+  const brand = clean(formData.get('brand'))
+  const appliedDate = String(formData.get('applied_date') || '')
+  const nextDueDate = clean(formData.get('next_due_date'))
+  const batchNumber = clean(formData.get('batch_number'))
+  const veterinarianName = clean(formData.get('veterinarian_name'))
+  const clinicName = clean(formData.get('clinic_name'))
+  const notes = clean(formData.get('notes'))
+
+  if (!vaccinationId || !vaccineName || !appliedDate) {
+    throw new Error('Faltan datos obligatorios de la vacuna.')
+  }
+
+  const { data: vaccination, error: vaccinationError } = await supabase
+    .from('pet_vaccinations')
+    .select('id, pet_id')
+    .eq('id', vaccinationId)
+    .single()
+
+  if (vaccinationError || !vaccination) {
+    throw new Error('No se encontró la vacuna.')
+  }
+
+  const { data: pet } = await supabase
+    .from('pets')
+    .select('id, name')
+    .eq('id', vaccination.pet_id)
+    .eq('primary_tutor_profile_id', user.id)
+    .single()
+
+  if (!pet) {
+    throw new Error('No tienes permiso para editar esta vacuna.')
+  }
+
+  const admin = createAdminClient()
+
+  const { error } = await admin
+    .from('pet_vaccinations')
+    .update({
+      catalog_id: null,
+      vaccine_name: vaccineName,
+      brand,
+      applied_date: appliedDate,
+      next_due_date: nextDueDate,
+      batch_number: batchNumber,
+      veterinarian_name: veterinarianName,
+      clinic_name: clinicName,
+      notes,
+    })
+    .eq('id', vaccinationId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  await syncMedicalReminderForSource({
+    petId: vaccination.pet_id,
+    recipientProfileId: user.id,
+    petName: pet.name,
+    sourceTable: 'pet_vaccinations',
+    sourceId: vaccinationId,
+    reminderKind: 'vaccination_due',
+    itemName: vaccineName,
+    nextDueDate,
+  })
+
+  revalidatePath(`/dashboard/pets/${vaccination.pet_id}/medical`)
+  revalidatePath('/dashboard')
+}
+
+export async function updateDewormingAction(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('No autenticado.')
+
+  const dewormingId = String(formData.get('record_id') || '')
+  const dewormerName = String(formData.get('dewormer_name') || '').trim()
+  const brand = clean(formData.get('brand'))
+  const category = clean(formData.get('category'))
+  const appliedDate = String(formData.get('applied_date') || '')
+  const nextDueDate = clean(formData.get('next_due_date'))
+  const veterinarianName = clean(formData.get('veterinarian_name'))
+  const clinicName = clean(formData.get('clinic_name'))
+  const notes = clean(formData.get('notes'))
+
+  if (!dewormingId || !dewormerName || !appliedDate) {
+    throw new Error('Faltan datos obligatorios de la desparasitación.')
+  }
+
+  const { data: deworming, error: dewormingError } = await supabase
+    .from('pet_dewormings')
+    .select('id, pet_id')
+    .eq('id', dewormingId)
+    .single()
+
+  if (dewormingError || !deworming) {
+    throw new Error('No se encontró la desparasitación.')
+  }
+
+  const { data: pet } = await supabase
+    .from('pets')
+    .select('id, name')
+    .eq('id', deworming.pet_id)
+    .eq('primary_tutor_profile_id', user.id)
+    .single()
+
+  if (!pet) {
+    throw new Error('No tienes permiso para editar esta desparasitación.')
+  }
+
+  const admin = createAdminClient()
+
+  const { error } = await admin
+    .from('pet_dewormings')
+    .update({
+      catalog_id: null,
+      dewormer_name: dewormerName,
+      brand,
+      category,
+      applied_date: appliedDate,
+      next_due_date: nextDueDate,
+      veterinarian_name: veterinarianName,
+      clinic_name: clinicName,
+      notes,
+    })
+    .eq('id', dewormingId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  await syncMedicalReminderForSource({
+    petId: deworming.pet_id,
+    recipientProfileId: user.id,
+    petName: pet.name,
+    sourceTable: 'pet_dewormings',
+    sourceId: dewormingId,
+    reminderKind: 'deworming_due',
+    itemName: dewormerName,
+    nextDueDate,
+  })
+
+  revalidatePath(`/dashboard/pets/${deworming.pet_id}/medical`)
+  revalidatePath('/dashboard')
+}
+
+export async function updateMedicalVisitAction(formData: FormData) {
+  const supabase = await createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('No autenticado.')
+
+  const visitId = String(formData.get('record_id') || '')
+  const visitDate = String(formData.get('visit_date') || '')
+  const reason = String(formData.get('reason') || '').trim()
+  const diagnosis = clean(formData.get('diagnosis'))
+  const treatment = clean(formData.get('treatment'))
+  const prescription = clean(formData.get('prescription'))
+  const notes = clean(formData.get('notes'))
+  const weightRaw = String(formData.get('weight_kg') || '').trim()
+  const temperatureRaw = String(formData.get('temperature_c') || '').trim()
+  const veterinarianName = clean(formData.get('veterinarian_name'))
+  const clinicName = clean(formData.get('clinic_name'))
+
+  if (!visitId || !visitDate || !reason) {
+    throw new Error('Faltan datos obligatorios de la consulta.')
+  }
+
+  const { data: visit, error: visitError } = await supabase
+    .from('pet_medical_visits')
+    .select('id, pet_id')
+    .eq('id', visitId)
+    .single()
+
+  if (visitError || !visit) {
+    throw new Error('No se encontró la consulta.')
+  }
+
+  const { data: pet } = await supabase
+    .from('pets')
+    .select('id')
+    .eq('id', visit.pet_id)
+    .eq('primary_tutor_profile_id', user.id)
+    .single()
+
+  if (!pet) {
+    throw new Error('No tienes permiso para editar esta consulta.')
+  }
+
+  const admin = createAdminClient()
+
+  const { error } = await admin
+    .from('pet_medical_visits')
+    .update({
+      visit_date: visitDate,
+      reason,
+      diagnosis,
+      treatment,
+      prescription,
+      notes,
+      weight_kg: weightRaw ? Number(weightRaw) : null,
+      temperature_c: temperatureRaw ? Number(temperatureRaw) : null,
+      veterinarian_name: veterinarianName,
+      clinic_name: clinicName,
+    })
+    .eq('id', visitId)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  if (weightRaw) {
+    await admin
+      .from('pet_medical_profiles')
+      .upsert(
+        {
+          pet_id: visit.pet_id,
+          weight_kg: Number(weightRaw),
+        },
+        { onConflict: 'pet_id' }
+      )
+  }
+
+  revalidatePath(`/dashboard/pets/${visit.pet_id}/medical`)
+  revalidatePath('/dashboard')
+}
+
+type ReminderSyncInput = {
+  petId: string
+  recipientProfileId: string
+  petName: string
+  sourceTable: 'pet_vaccinations' | 'pet_dewormings'
+  sourceId: string
+  reminderKind: 'vaccination_due' | 'deworming_due'
+  itemName: string
+  nextDueDate: string | null
+}
+
+async function syncMedicalReminderForSource({
+  petId,
+  recipientProfileId,
+  petName,
+  sourceTable,
+  sourceId,
+  reminderKind,
+  itemName,
+  nextDueDate,
+}: ReminderSyncInput) {
+  const admin = createAdminClient()
+
+  if (!nextDueDate) {
+    await admin
+      .from('pet_reminders')
+      .delete()
+      .eq('source_table', sourceTable)
+      .eq('source_id', sourceId)
+
+    return
+  }
+
+  const dueDate = normalizeDate(nextDueDate)
+
+  if (!dueDate) return
+
+  const reminderDate = subtractDays(dueDate, 7)
+  const isVaccine = reminderKind === 'vaccination_due'
+
+  const title = isVaccine
+    ? `Vacuna próxima para ${petName}`
+    : `Desparasitación próxima para ${petName}`
+
+  const body = isVaccine
+    ? `${petName} tiene programada la próxima vacuna: ${itemName}.`
+    : `${petName} tiene programada la próxima desparasitación: ${itemName}.`
+
+  const { data: existingReminder } = await admin
+    .from('pet_reminders')
+    .select('id, meta')
+    .eq('source_table', sourceTable)
+    .eq('source_id', sourceId)
+    .maybeSingle()
+
+  const currentMeta = getMetaObject(existingReminder?.meta)
+
+  const payload = {
+    pet_id: petId,
+    recipient_profile_id: recipientProfileId,
+    reminder_kind: reminderKind,
+    title,
+    body,
+    due_date: dueDate,
+    reminder_date: reminderDate,
+    status: 'pending',
+    email_sent_at: null,
+    dismissed_at: null,
+    meta: {
+      ...currentMeta,
+      item_name: itemName,
+      updated_from: 'medical_record_edit',
+      next_due_date: dueDate,
+      reminder_days_before: 7,
+    },
+  }
+
+  if (existingReminder?.id) {
+    await admin
+      .from('pet_reminders')
+      .update(payload)
+      .eq('id', existingReminder.id)
+
+    return
+  }
+
+  await admin.from('pet_reminders').insert({
+    ...payload,
+    source_table: sourceTable,
+    source_id: sourceId,
+  })
+}
+
 type MedicalReminderKind = 'vaccination_due' | 'deworming_due'
 
 type CreateMedicalReminderInput = {

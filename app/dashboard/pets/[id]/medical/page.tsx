@@ -49,7 +49,6 @@ export default async function PetMedicalPage({ params }: PageProps) {
     vaccineCatalog,
     dewormerCatalog,
   } = record
-  const lastVisit = visits[0] || null
 
   const nextVaccines = vaccinations
     .filter((item: any) => item.next_due_date)
@@ -62,7 +61,7 @@ export default async function PetMedicalPage({ params }: PageProps) {
     .sort((a: any, b: any) =>
       String(a.next_due_date).localeCompare(String(b.next_due_date))
     )
-
+const lastVisit = visits[0] || null
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -140,6 +139,7 @@ export default async function PetMedicalPage({ params }: PageProps) {
             </p>
           </section>
         ) : null}
+                  <MedicalRemindersPanel petId={pet.id} reminders={reminders} />
 
         <section className="grid gap-5 lg:grid-cols-3">
           <Card className="rounded-[28px] border-white/70 bg-white/95 shadow-lg lg:col-span-2">
@@ -232,115 +232,147 @@ export default async function PetMedicalPage({ params }: PageProps) {
                   label="Teléfono"
                   value={medicalProfile?.primary_vet_phone || 'No registrado'}
                 />
+                  <InfoBlock
+                  label="Alerta Médica Rápida"
+                  value={pet.medical_alerts ? pet.medical_alerts : 'No registrado'}
+                
+                />
               </div>
             </CardContent>
           </Card>
         </section>
 
-        <section className="grid gap-5 lg:grid-cols-2">
-          <MedicalRecordList
-            title="Vacunas"
-            emptyText="Aún no hay vacunas registradas."
-            recordType="vaccination"
-            records={vaccinations.map((item: any) => ({
-              id: item.id,
-              title: item.vaccine_name,
-              subtitle: item.brand || item.clinic_name || 'Vacuna registrada',
-              date: item.applied_date,
-              badge: item.next_due_date
-                ? `Próxima dosis: ${formatDate(item.next_due_date)}`
-                : null,
-              fields: [
-                { label: 'Vacuna', value: item.vaccine_name },
-                { label: 'Marca', value: item.brand },
-                {
-                  label: 'Fecha aplicada',
-                  value: item.applied_date ? formatDate(item.applied_date) : null,
-                },
-                {
-                  label: 'Próxima dosis',
-                  value: item.next_due_date
-                    ? formatDate(item.next_due_date)
-                    : null,
-                },
-                { label: 'Lote', value: item.batch_number },
-                { label: 'Veterinario', value: item.veterinarian_name },
-                { label: 'Clínica', value: item.clinic_name },
-                { label: 'Notas', value: item.notes },
-              ],
-            }))}
-          />
+        <section className="grid gap-5 lg:grid-cols-1">
 
           <MedicalRecordList
-            title="Desparasitación"
-            emptyText="Aún no hay desparasitaciones registradas."
-            recordType="deworming"
-            records={dewormings.map((item: any) => ({
-              id: item.id,
-              title: item.dewormer_name,
-              subtitle:
-                item.brand || item.category || 'Desparasitación registrada',
-              date: item.applied_date,
-              badge: item.next_due_date
-                ? `Próxima fecha: ${formatDate(item.next_due_date)}`
-                : null,
-              fields: [
-                { label: 'Desparasitante', value: item.dewormer_name },
-                { label: 'Marca', value: item.brand },
-                { label: 'Tipo', value: item.category },
-                {
-                  label: 'Fecha aplicada',
-                  value: item.applied_date ? formatDate(item.applied_date) : null,
-                },
-                {
-                  label: 'Próxima aplicación',
-                  value: item.next_due_date
-                    ? formatDate(item.next_due_date)
-                    : null,
-                },
-                { label: 'Veterinario', value: item.veterinarian_name },
-                { label: 'Clínica', value: item.clinic_name },
-                { label: 'Notas', value: item.notes },
-              ],
-            }))}
-          />
+  title="Vacunas"
+  emptyText="Aún no hay vacunas registradas."
+  recordType="vaccination"
+  records={vaccinations.map((item: any) => ({
+    id: item.id,
+    title: item.vaccine_name,
+    subtitle: item.brand || item.clinic_name || 'Vacuna registrada',
+    date: item.applied_date,
+    badge: item.next_due_date
+      ? `Próxima dosis: ${formatDate(item.next_due_date)}`
+      : null,
+    editData: {
+      vaccine_name: item.vaccine_name,
+      brand: item.brand,
+      applied_date: item.applied_date,
+      next_due_date: item.next_due_date,
+      batch_number: item.batch_number,
+      veterinarian_name: item.veterinarian_name,
+      clinic_name: item.clinic_name,
+      notes: item.notes,
+    },
+    fields: [
+      { label: 'Vacuna', value: item.vaccine_name },
+      { label: 'Marca', value: item.brand },
+      {
+        label: 'Fecha aplicada',
+        value: item.applied_date ? formatDate(item.applied_date) : null,
+      },
+      {
+        label: 'Próxima dosis',
+        value: item.next_due_date ? formatDate(item.next_due_date) : null,
+      },
+      { label: 'Lote', value: item.batch_number },
+      { label: 'Veterinario', value: item.veterinarian_name },
+      { label: 'Clínica', value: item.clinic_name },
+      { label: 'Notas', value: item.notes },
+    ],
+  }))}
+/>
+
+          <MedicalRecordList
+  title="Desparasitación"
+  emptyText="Aún no hay desparasitaciones registradas."
+  recordType="deworming"
+  records={dewormings.map((item: any) => ({
+    id: item.id,
+    title: item.dewormer_name,
+    subtitle: item.brand || item.category || 'Desparasitación registrada',
+    date: item.applied_date,
+    badge: item.next_due_date
+      ? `Próxima fecha: ${formatDate(item.next_due_date)}`
+      : null,
+    editData: {
+      dewormer_name: item.dewormer_name,
+      brand: item.brand,
+      category: item.category,
+      applied_date: item.applied_date,
+      next_due_date: item.next_due_date,
+      veterinarian_name: item.veterinarian_name,
+      clinic_name: item.clinic_name,
+      notes: item.notes,
+    },
+    fields: [
+      { label: 'Desparasitante', value: item.dewormer_name },
+      { label: 'Marca', value: item.brand },
+      { label: 'Tipo', value: item.category },
+      {
+        label: 'Fecha aplicada',
+        value: item.applied_date ? formatDate(item.applied_date) : null,
+      },
+      {
+        label: 'Próxima aplicación',
+        value: item.next_due_date ? formatDate(item.next_due_date) : null,
+      },
+      { label: 'Veterinario', value: item.veterinarian_name },
+      { label: 'Clínica', value: item.clinic_name },
+      { label: 'Notas', value: item.notes },
+    ],
+  }))}
+/>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-[1.3fr_0.9fr]">
           <MedicalRecordList
-            title="Consultas clínicas"
-            emptyText="Aún no hay consultas registradas."
-            recordType="visit"
-            records={visits.map((item: any) => ({
-              id: item.id,
-              title: item.reason,
-              subtitle: item.diagnosis || item.clinic_name || 'Consulta médica',
-              date: item.visit_date,
-              badge: item.treatment ? 'Con tratamiento registrado' : null,
-              fields: [
-                {
-                  label: 'Fecha de consulta',
-                  value: item.visit_date ? formatDate(item.visit_date) : null,
-                },
-                { label: 'Motivo', value: item.reason },
-                { label: 'Diagnóstico', value: item.diagnosis },
-                { label: 'Tratamiento', value: item.treatment },
-                { label: 'Receta / indicaciones', value: item.prescription },
-                {
-                  label: 'Peso',
-                  value: item.weight_kg ? `${item.weight_kg} kg` : null,
-                },
-                {
-                  label: 'Temperatura',
-                  value: item.temperature_c ? `${item.temperature_c} °C` : null,
-                },
-                { label: 'Veterinario', value: item.veterinarian_name },
-                { label: 'Clínica', value: item.clinic_name },
-                { label: 'Notas', value: item.notes },
-              ],
-            }))}
-          />
-
+  title="Consultas clínicas"
+  emptyText="Aún no hay consultas registradas."
+  recordType="visit"
+  records={visits.map((item: any) => ({
+    id: item.id,
+    title: item.reason,
+    subtitle: item.diagnosis || item.clinic_name || 'Consulta médica',
+    date: item.visit_date,
+    badge: item.treatment ? 'Con tratamiento registrado' : null,
+    editData: {
+      visit_date: item.visit_date,
+      reason: item.reason,
+      diagnosis: item.diagnosis,
+      treatment: item.treatment,
+      prescription: item.prescription,
+      weight_kg: item.weight_kg,
+      temperature_c: item.temperature_c,
+      veterinarian_name: item.veterinarian_name,
+      clinic_name: item.clinic_name,
+      notes: item.notes,
+    },
+    fields: [
+      {
+        label: 'Fecha de consulta',
+        value: item.visit_date ? formatDate(item.visit_date) : null,
+      },
+      { label: 'Motivo', value: item.reason },
+      { label: 'Diagnóstico', value: item.diagnosis },
+      { label: 'Tratamiento', value: item.treatment },
+      { label: 'Receta / indicaciones', value: item.prescription },
+      {
+        label: 'Peso',
+        value: item.weight_kg ? `${item.weight_kg} kg` : null,
+      },
+      {
+        label: 'Temperatura',
+        value: item.temperature_c ? `${item.temperature_c} °C` : null,
+      },
+      { label: 'Veterinario', value: item.veterinarian_name },
+      { label: 'Clínica', value: item.clinic_name },
+      { label: 'Notas', value: item.notes },
+    ],
+  }))}
+/>
           <Card className="rounded-[28px] border-white/70 bg-white/95 shadow-lg">
             <CardContent className="p-5 sm:p-6">
               <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
@@ -400,7 +432,6 @@ export default async function PetMedicalPage({ params }: PageProps) {
           </Card>
         </section>
 
-        <MedicalRemindersPanel petId={pet.id} reminders={reminders} />
 
         <section
           id="registrar-cuidados"
