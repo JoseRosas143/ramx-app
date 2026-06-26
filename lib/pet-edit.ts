@@ -20,6 +20,12 @@ export async function getTutorPetById(profileId: string, petId: string) {
       medical_alerts,
       status,
       profile_photo_url,
+      public_show_medical_summary,
+      public_show_primary_vet,
+      public_show_vaccinations,
+      public_show_dewormings,
+      public_show_medical_visits,
+      public_show_medical_documents,
       pet_public_settings (
         pet_id,
         show_pet_name,

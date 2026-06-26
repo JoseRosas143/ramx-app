@@ -15,6 +15,26 @@ export async function getPublicPetBySlug(slug: string) {
   const pet = data[0]
   const petId = pet.pet_id
 
+  const { data: petVisibility, error: petVisibilityError } = await supabase
+    .from('pets')
+    .select(`
+      public_show_medical_summary,
+      public_show_primary_vet,
+      public_show_vaccinations,
+      public_show_dewormings,
+      public_show_medical_visits,
+      public_show_medical_documents
+    `)
+    .eq('id', petId)
+    .maybeSingle()
+
+  if (petVisibilityError) {
+    console.error(
+      'RAMX public medical visibility error:',
+      petVisibilityError.message
+    )
+  }
+
   const [
     photosResult,
     activeLostReportResult,
@@ -225,6 +245,14 @@ export async function getPublicPetBySlug(slug: string) {
     map_sightings: sightingsResult.data || [],
 
     public_medical: {
+      visibility: {
+        summary: Boolean(petVisibility?.public_show_medical_summary),
+        primaryVet: Boolean(petVisibility?.public_show_primary_vet),
+        vaccinations: petVisibility?.public_show_vaccinations !== false,
+        dewormings: petVisibility?.public_show_dewormings !== false,
+        visits: Boolean(petVisibility?.public_show_medical_visits),
+        documents: Boolean(petVisibility?.public_show_medical_documents),
+      },
       profile: medicalProfileResult.data || null,
       vaccinations: vaccinationsResult.data || [],
       dewormings: dewormingsResult.data || [],

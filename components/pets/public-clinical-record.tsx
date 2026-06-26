@@ -10,6 +10,14 @@ type PublicClinicalRecordProps = {
   medicalAlerts?: string | null
   showMedicalAlerts?: boolean | null
   medical: {
+    visibility?: {
+      summary?: boolean
+      primaryVet?: boolean
+      vaccinations?: boolean
+      dewormings?: boolean
+      visits?: boolean
+      documents?: boolean
+    }
     profile: any | null
     vaccinations: any[]
     dewormings: any[]
@@ -32,13 +40,30 @@ export default function PublicClinicalRecord({
   const visits = medical?.visits || []
   const documents = medical?.documents || []
 
+  const visibility = medical?.visibility || {
+    summary: false,
+    primaryVet: false,
+    vaccinations: true,
+    dewormings: true,
+    visits: false,
+    documents: false,
+  }
+
+  const showSummary = Boolean(visibility.summary)
+  const showPrimaryVet = Boolean(visibility.primaryVet)
+  const showVaccinations = visibility.vaccinations !== false
+  const showDewormings = visibility.dewormings !== false
+  const showVisits = Boolean(visibility.visits)
+  const showDocuments = Boolean(visibility.documents)
+
   const hasAnyClinicalData =
-    !!profile ||
-    vaccinations.length > 0 ||
-    dewormings.length > 0 ||
-    visits.length > 0 ||
-    documents.length > 0 ||
-    (!!showMedicalAlerts && !!medicalAlerts)
+    (!!showMedicalAlerts && !!medicalAlerts) ||
+    showSummary ||
+    showPrimaryVet ||
+    showVaccinations ||
+    showDewormings ||
+    showVisits ||
+    showDocuments
 
   const lastVisit = visits[0] || null
 
@@ -103,246 +128,271 @@ export default function PublicClinicalRecord({
                   </section>
                 ) : null}
 
-                <div className="grid gap-4 lg:grid-cols-3">
-                  <Card className="rounded-[26px] border-neutral-100 bg-neutral-50/80 shadow-sm lg:col-span-2">
-                    <CardContent className="p-5">
-                      <h3 className="text-lg font-semibold text-neutral-950">
-                        Resumen clínico
-                      </h3>
+                {showSummary || showPrimaryVet ? (
+                  <div className="grid gap-4 lg:grid-cols-3">
+                    {showSummary ? (
+                      <Card className="rounded-[26px] border-neutral-100 bg-neutral-50/80 shadow-sm lg:col-span-2">
+                        <CardContent className="p-5">
+                          <h3 className="text-lg font-semibold text-neutral-950">
+                            Resumen clínico
+                          </h3>
 
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <InfoBlock
-                          label="Peso"
-                          value={
-                            profile?.weight_kg
-                              ? `${profile.weight_kg} kg`
-                              : 'No registrado'
-                          }
-                        />
-                        <InfoBlock
-                          label="Tipo de sangre"
-                          value={profile?.blood_type || 'No registrado'}
-                        />
-                        <InfoBlock
-                          label="Alergias"
-                          value={profile?.allergies || 'Sin registro'}
-                        />
-                        <InfoBlock
-                          label="Enfermedades crónicas"
-                          value={
-                            profile?.chronic_conditions || 'Sin registro'
-                          }
-                        />
-                        <InfoBlock
-                          label="Medicamentos actuales"
-                          value={
-                            profile?.current_medications || 'Sin registro'
-                          }
-                        />
-                        <InfoBlock
-                          label="Cuidados especiales"
-                          value={
-                            profile?.special_care_notes || 'Sin registro'
-                          }
-                        />
-                        <InfoBlock
-                          label="Última consulta"
-                          value={
-                            lastVisit?.visit_date
-                              ? formatDate(lastVisit.visit_date)
-                              : 'Sin registro'
-                          }
-                        />
-                        <InfoBlock
-                          label="Diagnóstico reciente"
-                          value={lastVisit?.diagnosis || 'Sin registro'}
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            <InfoBlock
+                              label="Peso"
+                              value={
+                                profile?.weight_kg
+                                  ? `${profile.weight_kg} kg`
+                                  : 'No registrado'
+                              }
+                            />
+                            <InfoBlock
+                              label="Tipo de sangre"
+                              value={profile?.blood_type || 'No registrado'}
+                            />
+                            <InfoBlock
+                              label="Alergias"
+                              value={profile?.allergies || 'Sin registro'}
+                            />
+                            <InfoBlock
+                              label="Enfermedades crónicas"
+                              value={
+                                profile?.chronic_conditions || 'Sin registro'
+                              }
+                            />
+                            <InfoBlock
+                              label="Medicamentos actuales"
+                              value={
+                                profile?.current_medications || 'Sin registro'
+                              }
+                            />
+                            <InfoBlock
+                              label="Cuidados especiales"
+                              value={
+                                profile?.special_care_notes || 'Sin registro'
+                              }
+                            />
+                            <InfoBlock
+                              label="Última consulta"
+                              value={
+                                lastVisit?.visit_date
+                                  ? formatDate(lastVisit.visit_date)
+                                  : 'Sin registro'
+                              }
+                            />
+                            <InfoBlock
+                              label="Diagnóstico reciente"
+                              value={lastVisit?.diagnosis || 'Sin registro'}
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : null}
 
-                  <Card className="rounded-[26px] border-neutral-100 bg-neutral-50/80 shadow-sm">
-                    <CardContent className="p-5">
-                      <h3 className="text-lg font-semibold text-neutral-950">
-                        Veterinaria principal
-                      </h3>
+                    {showPrimaryVet ? (
+                      <Card className="rounded-[26px] border-neutral-100 bg-neutral-50/80 shadow-sm">
+                        <CardContent className="p-5">
+                          <h3 className="text-lg font-semibold text-neutral-950">
+                            Veterinaria principal
+                          </h3>
 
-                      <div className="mt-4 space-y-3">
-                        <InfoBlock
-                          label="Veterinario"
-                          value={
-                            profile?.primary_vet_name || 'No registrado'
-                          }
-                        />
-                        <InfoBlock
-                          label="Clínica"
-                          value={
-                            profile?.primary_vet_clinic || 'No registrada'
-                          }
-                        />
-                        <InfoBlock
-                          label="Teléfono"
-                          value={
-                            profile?.primary_vet_phone || 'No registrado'
-                          }
-                        />
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                          <div className="mt-4 space-y-3">
+                            <InfoBlock
+                              label="Veterinario"
+                              value={
+                                profile?.primary_vet_name || 'No registrado'
+                              }
+                            />
+                            <InfoBlock
+                              label="Clínica"
+                              value={
+                                profile?.primary_vet_clinic || 'No registrada'
+                              }
+                            />
+                            <InfoBlock
+                              label="Teléfono"
+                              value={
+                                profile?.primary_vet_phone || 'No registrado'
+                              }
+                            />
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : null}
+                  </div>
+                ) : null}
 
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <ClinicalList
-                    title="Vacunas"
-                    emptyText="Sin vacunas registradas."
-                    items={vaccinations.map((item) => ({
-                      id: item.id,
-                      title: item.vaccine_name,
-                      subtitle:
-                        item.brand ||
-                        item.clinic_name ||
-                        'Vacuna registrada',
-                      date: item.applied_date,
-                      badge: item.next_due_date
-                        ? `Próxima dosis: ${formatDate(item.next_due_date)}`
-                        : null,
-                      details: [
-                        ['Marca', item.brand],
-                        [
-                          'Aplicada',
-                          item.applied_date
-                            ? formatDate(item.applied_date)
+                {showVaccinations || showDewormings ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {showVaccinations ? (
+                      <ClinicalList
+                        title="Vacunas"
+                        emptyText="Sin vacunas registradas."
+                        items={vaccinations.map((item) => ({
+                          id: item.id,
+                          title: item.vaccine_name,
+                          subtitle:
+                            item.brand ||
+                            item.clinic_name ||
+                            'Vacuna registrada',
+                          date: item.applied_date,
+                          badge: item.next_due_date
+                            ? `Próxima dosis: ${formatDate(
+                                item.next_due_date
+                              )}`
                             : null,
-                        ],
-                        [
-                          'Próxima dosis',
-                          item.next_due_date
-                            ? formatDate(item.next_due_date)
+                          details: [
+                            ['Marca', item.brand],
+                            [
+                              'Aplicada',
+                              item.applied_date
+                                ? formatDate(item.applied_date)
+                                : null,
+                            ],
+                            [
+                              'Próxima dosis',
+                              item.next_due_date
+                                ? formatDate(item.next_due_date)
+                                : null,
+                            ],
+                            ['Veterinario', item.veterinarian_name],
+                            ['Clínica', item.clinic_name],
+                            ['Notas', item.notes],
+                          ],
+                        }))}
+                      />
+                    ) : null}
+
+                    {showDewormings ? (
+                      <ClinicalList
+                        title="Desparasitación"
+                        emptyText="Sin desparasitaciones registradas."
+                        items={dewormings.map((item) => ({
+                          id: item.id,
+                          title: item.dewormer_name,
+                          subtitle:
+                            item.brand ||
+                            item.category ||
+                            'Desparasitación registrada',
+                          date: item.applied_date,
+                          badge: item.next_due_date
+                            ? `Próxima fecha: ${formatDate(
+                                item.next_due_date
+                              )}`
                             : null,
-                        ],
-                        ['Veterinario', item.veterinarian_name],
-                        ['Clínica', item.clinic_name],
-                        ['Notas', item.notes],
-                      ],
-                    }))}
-                  />
+                          details: [
+                            ['Marca', item.brand],
+                            ['Tipo', item.category],
+                            [
+                              'Aplicada',
+                              item.applied_date
+                                ? formatDate(item.applied_date)
+                                : null,
+                            ],
+                            [
+                              'Próxima aplicación',
+                              item.next_due_date
+                                ? formatDate(item.next_due_date)
+                                : null,
+                            ],
+                            ['Veterinario', item.veterinarian_name],
+                            ['Clínica', item.clinic_name],
+                            ['Notas', item.notes],
+                          ],
+                        }))}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
 
-                  <ClinicalList
-                    title="Desparasitación"
-                    emptyText="Sin desparasitaciones registradas."
-                    items={dewormings.map((item) => ({
-                      id: item.id,
-                      title: item.dewormer_name,
-                      subtitle:
-                        item.brand ||
-                        item.category ||
-                        'Desparasitación registrada',
-                      date: item.applied_date,
-                      badge: item.next_due_date
-                        ? `Próxima fecha: ${formatDate(item.next_due_date)}`
-                        : null,
-                      details: [
-                        ['Marca', item.brand],
-                        ['Tipo', item.category],
-                        [
-                          'Aplicada',
-                          item.applied_date
-                            ? formatDate(item.applied_date)
-                            : null,
-                        ],
-                        [
-                          'Próxima aplicación',
-                          item.next_due_date
-                            ? formatDate(item.next_due_date)
-                            : null,
-                        ],
-                        ['Veterinario', item.veterinarian_name],
-                        ['Clínica', item.clinic_name],
-                        ['Notas', item.notes],
-                      ],
-                    }))}
-                  />
-                </div>
+                {showVisits || showDocuments ? (
+                  <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+                    {showVisits ? (
+                      <ClinicalList
+                        title="Consultas clínicas recientes"
+                        emptyText="Sin consultas registradas."
+                        items={visits.map((item) => ({
+                          id: item.id,
+                          title: item.reason,
+                          subtitle:
+                            item.diagnosis ||
+                            item.clinic_name ||
+                            'Consulta médica',
+                          date: item.visit_date,
+                          badge: item.treatment ? 'Con tratamiento' : null,
+                          details: [
+                            [
+                              'Fecha',
+                              item.visit_date
+                                ? formatDate(item.visit_date)
+                                : null,
+                            ],
+                            ['Motivo', item.reason],
+                            ['Diagnóstico', item.diagnosis],
+                            ['Tratamiento', item.treatment],
+                            [
+                              'Peso',
+                              item.weight_kg ? `${item.weight_kg} kg` : null,
+                            ],
+                            [
+                              'Temperatura',
+                              item.temperature_c
+                                ? `${item.temperature_c} °C`
+                                : null,
+                            ],
+                            ['Veterinario', item.veterinarian_name],
+                            ['Clínica', item.clinic_name],
+                            ['Notas', item.notes],
+                          ],
+                        }))}
+                      />
+                    ) : null}
 
-                <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-                  <ClinicalList
-                    title="Consultas clínicas recientes"
-                    emptyText="Sin consultas registradas."
-                    items={visits.map((item) => ({
-                      id: item.id,
-                      title: item.reason,
-                      subtitle:
-                        item.diagnosis ||
-                        item.clinic_name ||
-                        'Consulta médica',
-                      date: item.visit_date,
-                      badge: item.treatment ? 'Con tratamiento' : null,
-                      details: [
-                        [
-                          'Fecha',
-                          item.visit_date ? formatDate(item.visit_date) : null,
-                        ],
-                        ['Motivo', item.reason],
-                        ['Diagnóstico', item.diagnosis],
-                        ['Tratamiento', item.treatment],
-                        [
-                          'Peso',
-                          item.weight_kg ? `${item.weight_kg} kg` : null,
-                        ],
-                        [
-                          'Temperatura',
-                          item.temperature_c
-                            ? `${item.temperature_c} °C`
-                            : null,
-                        ],
-                        ['Veterinario', item.veterinarian_name],
-                        ['Clínica', item.clinic_name],
-                        ['Notas', item.notes],
-                      ],
-                    }))}
-                  />
+                    {showDocuments ? (
+                      <Card className="rounded-[26px] border-neutral-100 bg-neutral-50/80 shadow-sm">
+                        <CardContent className="p-5">
+                          <h3 className="text-lg font-semibold text-neutral-950">
+                            Documentos médicos
+                          </h3>
 
-                  <Card className="rounded-[26px] border-neutral-100 bg-neutral-50/80 shadow-sm">
-                    <CardContent className="p-5">
-                      <h3 className="text-lg font-semibold text-neutral-950">
-                        Documentos médicos
-                      </h3>
+                          <p className="mt-1 text-xs leading-5 text-neutral-500">
+                            Por privacidad, el perfil público solo muestra la
+                            referencia del documento. No abre ni descarga
+                            archivos.
+                          </p>
 
-                      <p className="mt-1 text-xs leading-5 text-neutral-500">
-                        Por privacidad, el perfil público solo muestra la
-                        referencia del documento. No abre ni descarga archivos.
-                      </p>
+                          {documents.length === 0 ? (
+                            <p className="mt-4 rounded-2xl bg-white p-4 text-sm text-neutral-600">
+                              Sin documentos registrados.
+                            </p>
+                          ) : (
+                            <div className="mt-4 space-y-3">
+                              {documents.map((doc) => (
+                                <div
+                                  key={doc.id}
+                                  className="rounded-2xl border border-neutral-200 bg-white p-4"
+                                >
+                                  <p className="text-sm font-semibold text-neutral-950">
+                                    {doc.title}
+                                  </p>
+                                  <p className="mt-1 text-xs text-neutral-500">
+                                    {doc.document_type}
+                                  </p>
 
-                      {documents.length === 0 ? (
-                        <p className="mt-4 rounded-2xl bg-white p-4 text-sm text-neutral-600">
-                          Sin documentos registrados.
-                        </p>
-                      ) : (
-                        <div className="mt-4 space-y-3">
-                          {documents.map((doc) => (
-                            <div
-                              key={doc.id}
-                              className="rounded-2xl border border-neutral-200 bg-white p-4"
-                            >
-                              <p className="text-sm font-semibold text-neutral-950">
-                                {doc.title}
-                              </p>
-                              <p className="mt-1 text-xs text-neutral-500">
-                                {doc.document_type}
-                              </p>
-
-                              {doc.notes ? (
-                                <p className="mt-2 text-sm leading-6 text-neutral-600">
-                                  {doc.notes}
-                                </p>
-                              ) : null}
+                                  {doc.notes ? (
+                                    <p className="mt-2 text-sm leading-6 text-neutral-600">
+                                      {doc.notes}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             )}
           </section>

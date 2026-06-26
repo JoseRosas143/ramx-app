@@ -70,6 +70,12 @@ type PetData = {
   medical_alerts: string | null
   status: string | null
   profile_photo_url: string | null
+  public_show_medical_summary?: boolean | null
+  public_show_primary_vet?: boolean | null
+  public_show_vaccinations?: boolean | null
+  public_show_dewormings?: boolean | null
+  public_show_medical_visits?: boolean | null
+  public_show_medical_documents?: boolean | null
   pet_public_settings?: PublicSettings[] | PublicSettings | null
   pet_onboarding_vet_interest?: VetInterest[] | VetInterest | null
   pet_photos?: Photo[]
@@ -155,6 +161,25 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
   )
   const [showMapWhenLost, setShowMapWhenLost] = useState(
     settings?.show_map_when_lost ?? true
+  )
+
+  const [publicShowMedicalSummary, setPublicShowMedicalSummary] = useState(
+    pet.public_show_medical_summary ?? false
+  )
+  const [publicShowPrimaryVet, setPublicShowPrimaryVet] = useState(
+    pet.public_show_primary_vet ?? false
+  )
+  const [publicShowVaccinations, setPublicShowVaccinations] = useState(
+    pet.public_show_vaccinations ?? true
+  )
+  const [publicShowDewormings, setPublicShowDewormings] = useState(
+    pet.public_show_dewormings ?? true
+  )
+  const [publicShowMedicalVisits, setPublicShowMedicalVisits] = useState(
+    pet.public_show_medical_visits ?? false
+  )
+  const [publicShowMedicalDocuments, setPublicShowMedicalDocuments] = useState(
+    pet.public_show_medical_documents ?? false
   )
 
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
@@ -386,6 +411,25 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
 
     if (settingsError) {
       setStatusMessage(settingsError.message, 'error')
+      setSaving(false)
+      return
+    }
+
+    const { error: clinicalPrivacyError } = await supabase
+      .from('pets')
+      .update({
+        public_show_medical_summary: publicShowMedicalSummary,
+        public_show_primary_vet: publicShowPrimaryVet,
+        public_show_vaccinations: publicShowVaccinations,
+        public_show_dewormings: publicShowDewormings,
+        public_show_medical_visits: publicShowMedicalVisits,
+        public_show_medical_documents: publicShowMedicalDocuments,
+      })
+      .eq('id', pet.id)
+      .eq('primary_tutor_profile_id', profileId)
+
+    if (clinicalPrivacyError) {
+      setStatusMessage(clinicalPrivacyError.message, 'error')
       setSaving(false)
       return
     }
@@ -1011,6 +1055,64 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
           </p>
         </div>
       </SectionCard>
+
+      <div id="privacidad-publica" className="scroll-mt-24">
+        <SectionCard title="Privacidad del expediente clínico público">
+          <p className="mb-4 text-sm leading-6 text-neutral-600">
+            Elige qué partes del expediente clínico pueden ver las personas al
+            escanear el QR o abrir el perfil público de esta mascota.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Toggle
+              label="Mostrar resumen clínico"
+              checked={publicShowMedicalSummary}
+              onChange={setPublicShowMedicalSummary}
+            />
+
+            <Toggle
+              label="Mostrar veterinaria principal"
+              checked={publicShowPrimaryVet}
+              onChange={setPublicShowPrimaryVet}
+            />
+
+            <Toggle
+              label="Mostrar vacunas"
+              checked={publicShowVaccinations}
+              onChange={setPublicShowVaccinations}
+            />
+
+            <Toggle
+              label="Mostrar desparasitación"
+              checked={publicShowDewormings}
+              onChange={setPublicShowDewormings}
+            />
+
+            <Toggle
+              label="Mostrar consultas clínicas"
+              checked={publicShowMedicalVisits}
+              onChange={setPublicShowMedicalVisits}
+            />
+
+            <Toggle
+              label="Mostrar documentos médicos como referencia"
+              checked={publicShowMedicalDocuments}
+              onChange={setPublicShowMedicalDocuments}
+            />
+          </div>
+
+          <div className="mt-4 rounded-3xl border border-sky-100 bg-sky-50 p-4">
+            <p className="text-sm font-semibold text-sky-900">
+              Los documentos no se descargan públicamente
+            </p>
+
+            <p className="mt-2 text-sm leading-6 text-sky-800">
+              En el perfil público solo se muestra el tipo, título y notas del
+              documento. Los archivos médicos siguen protegidos.
+            </p>
+          </div>
+        </SectionCard>
+      </div>
 
       <SectionCard title="Veterinaria relacionada">
         <div className="grid gap-4 sm:grid-cols-2">

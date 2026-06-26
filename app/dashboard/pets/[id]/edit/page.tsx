@@ -1,8 +1,7 @@
-import { redirect, notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTutorPetById } from '@/lib/pet-edit'
 import EditPetForm from './pet-form'
-
 
 type PageProps = {
   params: Promise<{
@@ -33,12 +32,17 @@ export default async function EditPetPage({ params }: PageProps) {
       <div className="mx-auto max-w-4xl space-y-6">
         <section className="rounded-[32px] border border-white/70 bg-white/90 p-6 shadow-2xl backdrop-blur sm:p-8">
           <div className="space-y-2">
-            <p className="text-sm text-neutral-500">Dashboard · Editar perfil</p>
+            <p className="text-sm font-medium text-neutral-500">
+              Dashboard · Editar perfil
+            </p>
+
             <h1 className="text-3xl font-semibold tracking-tight text-neutral-950">
               Editar {pet.name}
             </h1>
+
             <p className="text-sm leading-6 text-neutral-600">
-              Actualiza datos generales, información médica, veterinaria y privacidad pública.
+              Actualiza datos generales, fotos, información médica, veterinaria,
+              estado de extravío y privacidad pública.
             </p>
           </div>
         </section>
