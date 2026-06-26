@@ -343,7 +343,7 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
     setPosterImageUrl('')
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setStatusMessage('')
@@ -377,6 +377,13 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
       medicalAlerts,
       profilePhotoUrl: coverUrl,
       status: isLostMode ? 'lost' : 'active',
+
+      publicShowMedicalSummary,
+      publicShowPrimaryVet,
+      publicShowVaccinations,
+      publicShowDewormings,
+      publicShowMedicalVisits,
+      publicShowMedicalDocuments,
     })
 
     if (!mainProfileResult.ok) {
@@ -411,25 +418,6 @@ export default function EditPetForm({ pet }: { pet: PetData }) {
 
     if (settingsError) {
       setStatusMessage(settingsError.message, 'error')
-      setSaving(false)
-      return
-    }
-
-    const { error: clinicalPrivacyError } = await supabase
-      .from('pets')
-      .update({
-        public_show_medical_summary: publicShowMedicalSummary,
-        public_show_primary_vet: publicShowPrimaryVet,
-        public_show_vaccinations: publicShowVaccinations,
-        public_show_dewormings: publicShowDewormings,
-        public_show_medical_visits: publicShowMedicalVisits,
-        public_show_medical_documents: publicShowMedicalDocuments,
-      })
-      .eq('id', pet.id)
-      .eq('primary_tutor_profile_id', profileId)
-
-    if (clinicalPrivacyError) {
-      setStatusMessage(clinicalPrivacyError.message, 'error')
       setSaving(false)
       return
     }

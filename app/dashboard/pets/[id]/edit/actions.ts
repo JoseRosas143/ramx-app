@@ -15,6 +15,12 @@ type UpdatePetMainProfileInput = {
   medicalAlerts: string
   profilePhotoUrl: string | null
   status: 'active' | 'lost'
+  publicShowMedicalSummary?: boolean
+  publicShowPrimaryVet?: boolean
+  publicShowVaccinations?: boolean
+  publicShowDewormings?: boolean
+  publicShowMedicalVisits?: boolean
+  publicShowMedicalDocuments?: boolean
 }
 
 type UpdatePetMainProfileResult = {
@@ -113,6 +119,15 @@ async function updatePetMainProfileFromInput(
       medical_alerts: normalizedMedicalAlerts,
       profile_photo_url: input.profilePhotoUrl,
       status: input.status,
+
+      public_show_medical_summary: Boolean(input.publicShowMedicalSummary),
+      public_show_primary_vet: Boolean(input.publicShowPrimaryVet),
+      public_show_vaccinations: input.publicShowVaccinations !== false,
+      public_show_dewormings: input.publicShowDewormings !== false,
+      public_show_medical_visits: Boolean(input.publicShowMedicalVisits),
+      public_show_medical_documents: Boolean(
+        input.publicShowMedicalDocuments
+      ),
     })
     .eq('id', petId)
     .eq('primary_tutor_profile_id', user.id)
