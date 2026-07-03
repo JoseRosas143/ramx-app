@@ -1,70 +1,76 @@
-import Link from 'next/link'
-import { requireRamxAdmin } from '@/lib/admin-auth'
-import { createAdminClient } from '@/lib/supabase/admin'
+import Link from "next/link";
+import { requireRamxAdmin } from "@/lib/admin-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   updateRamxOrderPaymentStatusAction,
   updateRamxOrderStatusAction,
-} from './actions'
+} from "./actions";
 
 type PageProps = {
   searchParams?: Promise<{
-    status?: string
-    payment?: string
-  }>
-}
+    status?: string;
+    payment?: string;
+  }>;
+};
 
 const ORDER_STATUS_OPTIONS = [
-  ['all', 'Todos'],
-  ['pending', 'Pendientes'],
-  ['confirmed', 'Confirmadas'],
-  ['in_production', 'En producción'],
-  ['ready', 'Listas'],
-  ['delivered', 'Entregadas'],
-  ['cancelled', 'Canceladas'],
-] as const
+  ["all", "Todos"],
+  ["pending", "Pendientes"],
+  ["confirmed", "Confirmadas"],
+  ["in_production", "En producción"],
+  ["ready", "Listas"],
+  ["delivered", "Entregadas"],
+  ["cancelled", "Canceladas"],
+] as const;
 
 const PAYMENT_STATUS_OPTIONS = [
-  ['all', 'Todos'],
-  ['unpaid', 'Sin pagar'],
-  ['manual_pending', 'Pendiente manual'],
-  ['paid', 'Pagado'],
-  ['refunded', 'Reembolsado'],
-  ['cancelled', 'Cancelado'],
-] as const
+  ["all", "Todos"],
+  ["unpaid", "Sin pagar"],
+  ["manual_pending", "Pendiente manual"],
+  ["paid", "Pagado"],
+  ["refunded", "Reembolsado"],
+  ["cancelled", "Cancelado"],
+] as const;
 
 const ORDER_LABELS: Record<string, string> = {
-  pending: 'Pendiente',
-  confirmed: 'Confirmada',
-  in_production: 'En producción',
-  ready: 'Lista',
-  delivered: 'Entregada',
-  cancelled: 'Cancelada',
-}
+  pending: "Pendiente",
+  confirmed: "Confirmada",
+  in_production: "En producción",
+  ready: "Lista",
+  delivered: "Entregada",
+  cancelled: "Cancelada",
+};
 
 const PAYMENT_LABELS: Record<string, string> = {
-  unpaid: 'Sin pagar',
-  manual_pending: 'Pendiente manual',
-  paid: 'Pagado',
-  refunded: 'Reembolsado',
-  cancelled: 'Cancelado',
-}
+  unpaid: "Sin pagar",
+  manual_pending: "Pendiente manual",
+  paid: "Pagado",
+  refunded: "Reembolsado",
+  cancelled: "Cancelado",
+};
 
 export default async function AdminOrdersPage({ searchParams }: PageProps) {
-  await requireRamxAdmin()
-  const admin = createAdminClient()
-  const query = searchParams ? await searchParams : {}
+  await requireRamxAdmin();
+  const admin = createAdminClient();
+  const query = searchParams ? await searchParams : {};
 
-  const status = query.status || 'all'
-  const payment = query.payment || 'all'
+  const status = query.status || "all";
+  const payment = query.payment || "all";
 
   let request = admin
-    .from('ramx_orders')
+    .from("ramx_orders")
     .select(
       `
       id,
       order_number,
       status,
       payment_status,
+      payment_provider,
+      mercado_pago_preference_id,
+      mercado_pago_payment_id,
+      mercado_pago_payment_status,
+      mercado_pago_payment_status_detail,
+      mercado_pago_payment_updated_at,
       customer_name,
       customer_email,
       customer_phone,
@@ -90,20 +96,20 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
         unit_price,
         subtotal
       )
-    `
+    `,
     )
-    .order('created_at', { ascending: false })
-    .limit(100)
+    .order("created_at", { ascending: false })
+    .limit(100);
 
-  if (status !== 'all') {
-    request = request.eq('status', status)
+  if (status !== "all") {
+    request = request.eq("status", status);
   }
 
-  if (payment !== 'all') {
-    request = request.eq('payment_status', payment)
+  if (payment !== "all") {
+    request = request.eq("payment_status", payment);
   }
 
-  const { data: orders, error } = await request
+  const { data: orders, error } = await request;
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
@@ -120,7 +126,8 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
               Órdenes RAMX
             </h1>
             <p className="mt-1 text-sm leading-6 text-neutral-600">
-              Solicitudes de Placa Inteligente NFC/Qr y combos de identidad RAMX.
+              Solicitudes de Placa Inteligente NFC/Qr y combos de identidad
+              RAMX.
             </p>
           </div>
 
@@ -212,10 +219,10 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                     {order.order_number}
                   </p>
                   <h2 className="mt-1 text-xl font-semibold text-neutral-950">
-                    {order.customer_name || 'Cliente RAMX'}
+                    {order.customer_name || "Cliente RAMX"}
                   </h2>
                   <p className="mt-1 text-sm text-neutral-600">
-                    Mascota:{' '}
+                    Mascota:{" "}
                     {order.pets?.public_slug ? (
                       <Link
                         href={`/p/${order.pets.public_slug}`}
@@ -225,42 +232,56 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                         {order.pets.name}
                       </Link>
                     ) : (
-                      order.pets?.name || 'Sin mascota'
+                      order.pets?.name || "Sin mascota"
                     )}
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <StatusPill label={ORDER_LABELS[order.status] || order.status} />
                   <StatusPill
-                    label={PAYMENT_LABELS[order.payment_status] || order.payment_status}
+                    label={ORDER_LABELS[order.status] || order.status}
+                  />
+                  <StatusPill
+                    label={
+                      PAYMENT_LABELS[order.payment_status] ||
+                      order.payment_status
+                    }
                     tone="payment"
                   />
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-4">
+              <div className="mt-5 grid gap-4 lg:grid-cols-5">
                 <InfoBox
                   label="Producto"
                   value={(order.ramx_order_items || [])
-                    .map((item: any) => `${item.quantity} × ${item.product_name}`)
-                    .join(', ')}
+                    .map(
+                      (item: any) => `${item.quantity} × ${item.product_name}`,
+                    )
+                    .join(", ")}
                 />
                 <InfoBox
                   label="Contacto"
-                  value={`${order.customer_phone || 'Sin teléfono'}${
-                    order.customer_email ? ` · ${order.customer_email}` : ''
+                  value={`${order.customer_phone || "Sin teléfono"}${
+                    order.customer_email ? ` · ${order.customer_email}` : ""
                   }`}
                 />
                 <InfoBox
                   label="Entrega"
                   value={`${deliveryLabel(order.shipping_method)}${
-                    order.shipping_address ? `\n${order.shipping_address}` : ''
+                    order.shipping_address ? `\n${order.shipping_address}` : ""
                   }`}
                 />
                 <InfoBox
                   label="Total"
-                  value={formatMxn(Number(order.total_amount || 0), order.currency)}
+                  value={formatMxn(
+                    Number(order.total_amount || 0),
+                    order.currency,
+                  )}
+                />
+                <InfoBox
+                  label="Mercado Pago"
+                  value={mercadoPagoSummary(order)}
                 />
               </div>
 
@@ -291,24 +312,27 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
               ) : null}
 
               <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_0.8fr_auto]">
-                <form action={updateRamxOrderStatusAction} className="grid gap-2 sm:grid-cols-[1fr_1.2fr_auto]">
+                <form
+                  action={updateRamxOrderStatusAction}
+                  className="grid gap-2 sm:grid-cols-[1fr_1.2fr_auto]"
+                >
                   <input type="hidden" name="order_id" value={order.id} />
                   <select
                     name="status"
                     defaultValue={order.status}
                     className="h-11 rounded-2xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:border-neutral-950"
                   >
-                    {ORDER_STATUS_OPTIONS.filter(([value]) => value !== 'all').map(
-                      ([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      )
-                    )}
+                    {ORDER_STATUS_OPTIONS.filter(
+                      ([value]) => value !== "all",
+                    ).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
                   <input
                     name="admin_notes"
-                    defaultValue={order.admin_notes || ''}
+                    defaultValue={order.admin_notes || ""}
                     placeholder="Nota admin"
                     className="h-11 rounded-2xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:border-neutral-950"
                   />
@@ -320,20 +344,23 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                   </button>
                 </form>
 
-                <form action={updateRamxOrderPaymentStatusAction} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                <form
+                  action={updateRamxOrderPaymentStatusAction}
+                  className="grid gap-2 sm:grid-cols-[1fr_auto]"
+                >
                   <input type="hidden" name="order_id" value={order.id} />
                   <select
                     name="payment_status"
                     defaultValue={order.payment_status}
                     className="h-11 rounded-2xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:border-neutral-950"
                   >
-                    {PAYMENT_STATUS_OPTIONS.filter(([value]) => value !== 'all').map(
-                      ([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      )
-                    )}
+                    {PAYMENT_STATUS_OPTIONS.filter(
+                      ([value]) => value !== "all",
+                    ).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
                   <button
                     type="submit"
@@ -345,7 +372,10 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
 
                 {order.customer_phone ? (
                   <a
-                    href={whatsappHref(order.customer_phone, order.order_number)}
+                    href={whatsappHref(
+                      order.customer_phone,
+                      order.order_number,
+                    )}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex h-11 items-center justify-center rounded-2xl bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700"
@@ -359,7 +389,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
         </section>
       </div>
     </main>
-  )
+  );
 }
 
 function InfoBox({ label, value }: { label: string; value: string }) {
@@ -368,53 +398,81 @@ function InfoBox({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
         {label}
       </p>
-      <p className="mt-1 whitespace-pre-line text-sm leading-6 text-neutral-800">{value || '—'}</p>
+      <p className="mt-1 whitespace-pre-line text-sm leading-6 text-neutral-800">
+        {value || "—"}
+      </p>
     </div>
-  )
+  );
 }
 
 function StatusPill({
   label,
-  tone = 'order',
+  tone = "order",
 }: {
-  label: string
-  tone?: 'order' | 'payment'
+  label: string;
+  tone?: "order" | "payment";
 }) {
   const className =
-    tone === 'payment'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-      : 'border-sky-200 bg-sky-50 text-sky-800'
+    tone === "payment"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : "border-sky-200 bg-sky-50 text-sky-800";
 
   return (
-    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>
+    <span
+      className={`rounded-full border px-3 py-1 text-xs font-semibold ${className}`}
+    >
       {label}
     </span>
-  )
+  );
 }
 
-function formatMxn(amount: number, currency = 'MXN') {
-  return new Intl.NumberFormat('es-MX', {
-    style: 'currency',
-    currency: currency || 'MXN',
+function formatMxn(amount: number, currency = "MXN") {
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: currency || "MXN",
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(amount);
 }
 
 function deliveryLabel(value: string) {
   const labels: Record<string, string> = {
-    to_confirm: 'Confirmar por WhatsApp',
-    pickup: 'Entrega / recolección local',
-    shipping: 'Envío a domicilio',
-  }
+    to_confirm: "Confirmar por WhatsApp",
+    pickup: "Entrega / recolección local",
+    shipping: "Envío a domicilio",
+    digital: "Digital / sin envío",
+  };
 
-  return labels[value] || 'Confirmar'
+  return labels[value] || "Confirmar";
 }
 
 function whatsappHref(phone: string, orderNumber: string) {
-  const normalized = phone.replace(/[^0-9]/g, '')
+  const normalized = phone.replace(/[^0-9]/g, "");
   const message = encodeURIComponent(
-    `Hola, te escribo de RAMX sobre tu solicitud ${orderNumber}.`
-  )
+    `Hola, te escribo de RAMX sobre tu solicitud ${orderNumber}.`,
+  );
 
-  return `https://wa.me/${normalized}?text=${message}`
+  return `https://wa.me/${normalized}?text=${message}`;
+}
+
+function mercadoPagoSummary(order: any) {
+  if (order.payment_provider !== "mercado_pago")
+    return "Pago manual / por confirmar";
+
+  const lines = [
+    order.mercado_pago_payment_status
+      ? `Estado MP: ${order.mercado_pago_payment_status}${
+          order.mercado_pago_payment_status_detail
+            ? ` · ${order.mercado_pago_payment_status_detail}`
+            : ""
+        }`
+      : "Preferencia creada",
+    order.mercado_pago_payment_id
+      ? `Pago: ${order.mercado_pago_payment_id}`
+      : null,
+    order.mercado_pago_preference_id
+      ? `Preferencia: ${order.mercado_pago_preference_id}`
+      : null,
+  ].filter(Boolean);
+
+  return lines.join("\n");
 }

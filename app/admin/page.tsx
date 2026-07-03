@@ -1,8 +1,8 @@
-import Link from 'next/link'
-import { requireRamxAdmin } from '@/lib/admin-auth'
+import Link from "next/link";
+import { requireRamxAdmin } from "@/lib/admin-auth";
 
 export default async function AdminHomePage() {
-  await requireRamxAdmin()
+  await requireRamxAdmin();
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
@@ -45,7 +45,10 @@ export default async function AdminHomePage() {
             </p>
           </Link>
 
-          <div className="rounded-[28px] border border-dashed border-neutral-300 bg-white/60 p-6">
+          <Link
+            href="/admin/orders"
+            className="rounded-[28px] border border-white/80 bg-white/90 p-6 shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl"
+          >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-xl">
               🛒
             </div>
@@ -55,11 +58,11 @@ export default async function AdminHomePage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-neutral-600">
-              Próximo módulo: solicitudes de tienda, producción, entrega y pagos.
+              Revisa solicitudes, pagos por Mercado Pago, producción y entrega.
             </p>
-          </div>
+          </Link>
         </section>
       </div>
     </main>
-  )
+  );
 }
