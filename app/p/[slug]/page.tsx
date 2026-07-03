@@ -270,7 +270,50 @@ export default async function PublicPetPage({ params }: PageProps) {
             publicSlug={pet.public_slug}
           />
         ) : null}
+                {!isLost ? (
+          <section className="rounded-[32px] border border-sky-100 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 shadow-lg sm:p-6">
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
+                  ¿Encontraste o viste a esta mascota?
+                </h2>
 
+                <p className="text-sm leading-6 text-neutral-600">
+                  Aunque no esté marcada como extraviada, puedes enviar un aviso al tutor.
+                  Esto ayuda si la mascota está sola, desorientada o fuera de casa.
+                </p>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <a
+                  href={`/p/${pet.public_slug}/report?type=sighting`}
+                  className="inline-flex min-h-[56px] items-center justify-center rounded-2xl border border-sky-200 bg-white px-4 py-3 text-sm font-medium text-sky-900 transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  La vi
+                </a>
+
+                <a
+                  href={`/p/${pet.public_slug}/report?type=found_safe`}
+                  className="inline-flex min-h-[56px] items-center justify-center rounded-2xl bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition hover:-translate-y-0.5 hover:bg-emerald-700 hover:shadow-md"
+                >
+                  La encontré y la tengo conmigo
+                </a>
+              </div>
+
+              <div className="rounded-3xl border border-white/80 bg-white/80 p-4">
+                <p className="text-sm font-semibold text-neutral-900">
+                  Tu reporte no se publica automáticamente como dato personal.
+                </p>
+
+                <p className="mt-2 text-sm leading-6 text-neutral-600">
+                  RAMX avisará al tutor y guardará la información para que pueda revisar
+                  el reporte desde su dashboard.
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
+        
         <section className="grid gap-5 lg:grid-cols-2">
           {showContact ? (
             <section className="rounded-[28px] border border-neutral-200 bg-white/95 p-5 shadow-lg">
