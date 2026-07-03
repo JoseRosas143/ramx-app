@@ -1,0 +1,52 @@
+<svg width="900" height="700" viewBox="0 0 900 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="900" height="700" rx="72" fill="url(#bg)"/>
+  <circle cx="725" cy="128" r="120" fill="#FDBA74" fill-opacity="0.55"/>
+  <circle cx="175" cy="555" r="150" fill="#BAE6FD" fill-opacity="0.7"/>
+  <g filter="url(#shadowPassport)">
+    <rect x="440" y="122" width="285" height="390" rx="38" fill="#FFFFFF"/>
+    <rect x="470" y="162" width="225" height="58" rx="18" fill="#111827"/>
+    <text x="582" y="199" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800" fill="#FFFFFF">PASAPORTE</text>
+    <rect x="480" y="256" width="86" height="86" rx="22" fill="#FDBA74" fill-opacity="0.85"/>
+    <rect x="585" y="258" width="86" height="18" rx="9" fill="#CBD5E1"/>
+    <rect x="585" y="294" width="92" height="18" rx="9" fill="#CBD5E1"/>
+    <rect x="480" y="382" width="190" height="18" rx="9" fill="#E5E7EB"/>
+    <rect x="480" y="424" width="155" height="18" rx="9" fill="#E5E7EB"/>
+  </g>
+  <g filter="url(#shadowTag)">
+    <rect x="188" y="176" width="270" height="352" rx="72" fill="#111827"/>
+    <circle cx="323" cy="228" r="28" fill="#F8FAFC"/>
+    <rect x="238" y="304" width="170" height="170" rx="20" fill="#FFFFFF"/>
+    <rect x="260" y="326" width="40" height="40" rx="6" fill="#111827"/>
+    <rect x="346" y="326" width="40" height="40" rx="6" fill="#111827"/>
+    <rect x="260" y="412" width="40" height="40" rx="6" fill="#111827"/>
+    <rect x="314" y="330" width="18" height="18" rx="4" fill="#111827"/>
+    <rect x="314" y="382" width="38" height="22" rx="5" fill="#111827"/>
+    <rect x="364" y="392" width="22" height="60" rx="5" fill="#111827"/>
+    <rect x="314" y="430" width="36" height="22" rx="5" fill="#111827"/>
+  </g>
+  <g filter="url(#shadowCert)">
+    <rect x="332" y="480" width="330" height="116" rx="28" fill="#FFFFFF"/>
+    <circle cx="386" cy="538" r="27" fill="#FDBA74"/>
+    <path d="M374 540L384 550L401 527" stroke="#111827" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="430" y="516" width="175" height="17" rx="8.5" fill="#111827"/>
+    <rect x="430" y="548" width="132" height="14" rx="7" fill="#CBD5E1"/>
+  </g>
+  <rect x="68" y="70" width="216" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.84"/>
+  <text x="176" y="106" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" fill="#111827">Identidad RAMX</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="900" y2="700" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF7ED"/>
+      <stop offset="0.52" stop-color="#EFF6FF"/>
+      <stop offset="1" stop-color="#F8FAFC"/>
+    </linearGradient>
+    <filter id="shadowPassport" x="385" y="82" width="395" height="500" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="30" stdDeviation="28" flood-color="#0F172A" flood-opacity="0.17"/>
+    </filter>
+    <filter id="shadowTag" x="130" y="135" width="385" height="470" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="34" stdDeviation="30" flood-color="#0F172A" flood-opacity="0.2"/>
+    </filter>
+    <filter id="shadowCert" x="285" y="448" width="425" height="210" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="24" stdDeviation="26" flood-color="#0F172A" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+</svg>

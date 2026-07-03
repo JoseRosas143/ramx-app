@@ -1,0 +1,33 @@
+<svg width="900" height="700" viewBox="0 0 900 700" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="900" height="700" rx="72" fill="url(#bg)"/>
+  <circle cx="705" cy="135" r="120" fill="#FDBA74" fill-opacity="0.55"/>
+  <circle cx="190" cy="560" r="150" fill="#BAE6FD" fill-opacity="0.65"/>
+  <g filter="url(#shadow)">
+    <rect x="260" y="105" width="380" height="480" rx="92" fill="#111827"/>
+    <circle cx="450" cy="168" r="42" fill="#F8FAFC"/>
+    <rect x="318" y="250" width="264" height="264" rx="28" fill="#FFFFFF"/>
+    <rect x="348" y="280" width="62" height="62" rx="8" fill="#111827"/>
+    <rect x="490" y="280" width="62" height="62" rx="8" fill="#111827"/>
+    <rect x="348" y="422" width="62" height="62" rx="8" fill="#111827"/>
+    <rect x="438" y="282" width="24" height="24" rx="5" fill="#111827"/>
+    <rect x="438" y="330" width="48" height="24" rx="5" fill="#111827"/>
+    <rect x="418" y="382" width="34" height="34" rx="5" fill="#111827"/>
+    <rect x="478" y="382" width="74" height="24" rx="5" fill="#111827"/>
+    <rect x="438" y="446" width="24" height="38" rx="5" fill="#111827"/>
+    <rect x="488" y="438" width="64" height="46" rx="5" fill="#111827"/>
+    <path d="M382 212C420 192 478 192 516 212" stroke="#FDBA74" stroke-width="18" stroke-linecap="round"/>
+    <path d="M354 214C414 166 486 166 546 214" stroke="#FDBA74" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+  </g>
+  <rect x="70" y="70" width="182" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.82"/>
+  <text x="161" y="106" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#111827">RAMX Tag</text>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="900" y2="700" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF7ED"/>
+      <stop offset="0.52" stop-color="#EFF6FF"/>
+      <stop offset="1" stop-color="#F8FAFC"/>
+    </linearGradient>
+    <filter id="shadow" x="190" y="60" width="520" height="620" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="36" stdDeviation="34" flood-color="#0F172A" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+</svg>

@@ -1,32 +1,12 @@
+import Image from 'next/image'
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import {
+  RAMX_STORE_PRODUCTS,
+  formatMxn,
+} from '@/lib/ramx-store-products'
 import { createPhysicalProductOrderAction } from './actions'
-
-const PRODUCTS = [
-  {
-    type: 'placa_qr_nfc',
-    title: 'Placa QR/NFC',
-    description:
-      'Placa física para collar con QR y NFC vinculables al perfil público RAMX.',
-    includes: ['QR único', 'NFC integrado', 'Activación RAMX', 'Perfil público'],
-  },
-  {
-    type: 'microchip_placa_qr_nfc',
-    title: 'Microchip + placa QR/NFC',
-    description:
-      'Ideal para identificación doble: microchip más placa RAMX con QR/NFC.',
-    includes: ['Microchip', 'Placa QR/NFC', 'Activación RAMX', 'Perfil público'],
-  },
-  {
-    type: 'kit_ramx',
-    title: 'Kit RAMX',
-    description:
-      'Paquete completo de identidad física y digital para mascota.',
-    includes: ['Placa QR/NFC', 'Pasaporte', 'Certificado', 'Microchip'],
-  },
-] as const
 
 type PageProps = {
   searchParams?: Promise<{
@@ -39,9 +19,11 @@ export default async function PhysicalProductOrderPage({
 }: PageProps) {
   const query = searchParams ? await searchParams : {}
 
-  const selectedProduct = PRODUCTS.some((item) => item.type === query.product)
+  const selectedProduct = RAMX_STORE_PRODUCTS.some(
+    (item) => item.type === query.product
+  )
     ? query.product
-    : PRODUCTS[0].type
+    : RAMX_STORE_PRODUCTS[0].type
 
   const supabase = await createClient()
   const admin = createAdminClient()
@@ -50,25 +32,32 @@ export default async function PhysicalProductOrderPage({
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (!user) {
-    redirect('/auth/login')
+  let petOptions: Array<{
+    id: string
+    name: string
+    species: string | null
+    public_slug: string | null
+    microchip_number: string | null
+    internal_id: string | null
+  }> = []
+
+  if (user) {
+    const { data: pets, error: petsError } = await admin
+      .from('pets')
+      .select('id, name, species, public_slug, microchip_number, internal_id')
+      .eq('primary_tutor_profile_id', user.id)
+      .order('created_at', { ascending: false })
+
+    if (petsError) {
+      console.error('RAMX tienda order pets error:', petsError.message)
+    }
+
+    petOptions = pets || []
   }
-
-  const { data: pets, error: petsError } = await admin
-    .from('pets')
-    .select('id, name, species, public_slug, microchip_number, internal_id')
-    .eq('primary_tutor_profile_id', user.id)
-    .order('created_at', { ascending: false })
-
-  if (petsError) {
-    console.error('RAMX tienda order pets error:', petsError.message)
-  }
-
-  const petOptions = pets || []
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/tienda"
@@ -77,12 +66,23 @@ export default async function PhysicalProductOrderPage({
             ← Volver a tienda
           </Link>
 
-          <Link
-            href="/dashboard"
-            className="rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-          >
-            Dashboard
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {user ? (
+              <Link
+                href="/dashboard"
+                className="rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+              >
+                Iniciar sesión
+              </Link>
+            )}
+          </div>
         </div>
 
         <section className="rounded-[34px] border border-white/80 bg-white/95 p-6 shadow-2xl backdrop-blur sm:p-8">
@@ -94,16 +94,16 @@ export default async function PhysicalProductOrderPage({
             Solicitar producto físico
           </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-600">
-            Selecciona el producto para tu mascota. Esta primera versión crea una
-            solicitud interna; el equipo RAMX confirmará disponibilidad, diseño y
-            entrega antes de cobrar o producir.
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
+            Elige tu producto RAMX y captura tus datos de entrega. Puedes
+            comprar aunque todavía no tengas cuenta; si ya tienes una mascota
+            registrada, también puedes vincular la solicitud desde aquí.
           </p>
         </section>
 
         <form
           action={createPhysicalProductOrderAction}
-          className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]"
+          className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]"
         >
           <section className="rounded-[30px] border border-white/80 bg-white/95 p-5 shadow-xl sm:p-6">
             <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
@@ -111,38 +111,56 @@ export default async function PhysicalProductOrderPage({
             </h2>
 
             <div className="mt-5 grid gap-4">
-              {PRODUCTS.map((product) => (
+              {RAMX_STORE_PRODUCTS.map((product) => (
                 <label
                   key={product.type}
-                  className="block cursor-pointer rounded-3xl border border-neutral-200 bg-neutral-50/70 p-4 transition hover:border-neutral-400 hover:bg-white"
+                  className="block cursor-pointer rounded-[28px] border border-neutral-200 bg-neutral-50/70 p-3 transition hover:border-neutral-400 hover:bg-white sm:p-4"
                 >
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="radio"
-                      name="product_type"
-                      value={product.type}
-                      defaultChecked={product.type === selectedProduct}
-                      className="mt-1 h-4 w-4"
-                    />
+                  <div className="grid gap-4 sm:grid-cols-[150px_1fr] sm:items-center">
+                    <div className="overflow-hidden rounded-3xl border border-white bg-white shadow-sm">
+                      <Image
+                        src={product.imageSrc}
+                        alt={product.title}
+                        width={900}
+                        height={700}
+                        className="aspect-[4/3] w-full object-cover"
+                      />
+                    </div>
 
-                    <div className="min-w-0 flex-1">
-                      <p className="text-base font-semibold text-neutral-950">
-                        {product.title}
-                      </p>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="product_type"
+                        value={product.type}
+                        defaultChecked={product.type === selectedProduct}
+                        className="mt-1 h-4 w-4 shrink-0"
+                      />
 
-                      <p className="mt-1 text-sm leading-6 text-neutral-600">
-                        {product.description}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <p className="text-base font-semibold text-neutral-950">
+                            {product.title}
+                          </p>
 
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {product.includes.map((item) => (
-                          <span
-                            key={item}
-                            className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-neutral-600 shadow-sm"
-                          >
-                            {item}
-                          </span>
-                        ))}
+                          <p className="rounded-full bg-neutral-950 px-3 py-1 text-xs font-semibold text-white">
+                            {formatMxn(product.price)}
+                          </p>
+                        </div>
+
+                        <p className="mt-1 text-sm leading-6 text-neutral-600">
+                          {product.description}
+                        </p>
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {product.includes.map((item) => (
+                            <span
+                              key={item}
+                              className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-neutral-600 shadow-sm"
+                            >
+                              {item}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -168,21 +186,20 @@ export default async function PhysicalProductOrderPage({
 
           <section className="rounded-[30px] border border-white/80 bg-white/95 p-5 shadow-xl sm:p-6">
             <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
-              2. Mascota y contacto
+              2. Comprador y entrega
             </h2>
 
             <div className="mt-5 space-y-4">
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-neutral-700">
-                  Mascota
+                  Mascota registrada, si aplica
                 </span>
 
                 <select
                   name="pet_id"
-                  required
                   className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
                 >
-                  <option value="">Selecciona mascota</option>
+                  <option value="">Comprador nuevo / vincular después</option>
 
                   {petOptions.map((pet) => (
                     <option key={pet.id} value={pet.id}>
@@ -193,24 +210,30 @@ export default async function PhysicalProductOrderPage({
                 </select>
               </label>
 
-              {petOptions.length === 0 ? (
-                <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4">
-                  <p className="text-sm font-semibold text-amber-950">
-                    Primero registra una mascota
+              {!user ? (
+                <div className="rounded-3xl border border-sky-200 bg-sky-50 p-4">
+                  <p className="text-sm font-semibold text-sky-950">
+                    Puedes comprar sin cuenta
                   </p>
 
-                  <p className="mt-1 text-sm leading-6 text-amber-800">
-                    Necesitas una mascota para vincular la placa, microchip o kit.
+                  <p className="mt-1 text-sm leading-6 text-sky-800">
+                    Después podrás activar el QR/NFC y vincularlo a la mascota
+                    cuando recibas tu producto.
                   </p>
-
-                  <Link
-                    href="/dashboard/pets/new"
-                    className="mt-3 inline-flex rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white"
-                  >
-                    Agregar mascota
-                  </Link>
                 </div>
               ) : null}
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-neutral-700">
+                  Nombre de la mascota, si aún no está registrada
+                </span>
+
+                <input
+                  name="pet_name"
+                  placeholder="Ej. Niña, Max, Luna"
+                  className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
+                />
+              </label>
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-neutral-700">
@@ -227,13 +250,14 @@ export default async function PhysicalProductOrderPage({
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-neutral-700">
-                  Correo
+                  Correo para confirmación
                 </span>
 
                 <input
                   name="customer_email"
                   type="email"
-                  defaultValue={user.email || ''}
+                  required
+                  defaultValue={user?.email || ''}
                   placeholder="correo@ejemplo.com"
                   className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
                 />
@@ -268,18 +292,62 @@ export default async function PhysicalProductOrderPage({
                 </select>
               </label>
 
-              <label className="block space-y-2">
-                <span className="text-sm font-medium text-neutral-700">
-                  Dirección o zona de entrega
-                </span>
+              <div className="rounded-3xl border border-neutral-200 bg-neutral-50/70 p-4">
+                <p className="text-sm font-semibold text-neutral-950">
+                  Dirección de entrega
+                </p>
 
-                <textarea
-                  name="shipping_address"
-                  rows={3}
-                  placeholder="Opcional por ahora"
-                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-950"
-                />
-              </label>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-2 sm:col-span-2">
+                    <span className="text-sm font-medium text-neutral-700">
+                      Calle y número
+                    </span>
+                    <input
+                      name="shipping_street"
+                      required
+                      placeholder="Ej. Av. Reforma 123"
+                      className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
+                    />
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-neutral-700">
+                      Colonia
+                    </span>
+                    <input
+                      name="shipping_neighborhood"
+                      required
+                      placeholder="Ej. Centro"
+                      className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
+                    />
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-neutral-700">
+                      Estado
+                    </span>
+                    <input
+                      name="shipping_state"
+                      required
+                      placeholder="Ej. Puebla"
+                      className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
+                    />
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-neutral-700">
+                      C.P.
+                    </span>
+                    <input
+                      name="shipping_postal_code"
+                      required
+                      inputMode="numeric"
+                      placeholder="Ej. 72000"
+                      className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
+                    />
+                  </label>
+                </div>
+              </div>
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium text-neutral-700">
@@ -296,8 +364,7 @@ export default async function PhysicalProductOrderPage({
 
               <button
                 type="submit"
-                disabled={petOptions.length === 0}
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-neutral-950 px-5 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800 hover:shadow-lg disabled:opacity-60"
+                className="inline-flex w-full items-center justify-center rounded-2xl bg-neutral-950 px-5 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800 hover:shadow-lg"
               >
                 Crear solicitud RAMX
               </button>

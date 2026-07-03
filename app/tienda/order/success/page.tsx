@@ -36,17 +36,18 @@ export default async function PhysicalProductOrderSuccessPage({
         </p>
 
         <p className="mt-5 text-sm leading-6 text-neutral-600">
-          El equipo RAMX revisará los datos del producto, disponibilidad,
-          diseño y entrega. Después te contactaremos para confirmar el siguiente
-          paso.
+          También enviamos una confirmación al correo capturado y una
+          notificación interna al equipo RAMX. Revisaremos los datos del
+          producto, disponibilidad, diseño y entrega antes de confirmar el
+          siguiente paso.
         </p>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Link
-            href="/dashboard"
+            href="/tienda/order"
             className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
           >
-            Ir al dashboard
+            Crear otra solicitud
           </Link>
 
           <Link

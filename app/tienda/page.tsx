@@ -1,4 +1,6 @@
+import Image from 'next/image'
 import Link from 'next/link'
+import { RAMX_STORE_PRODUCTS, formatMxn } from '@/lib/ramx-store-products'
 
 const RAMX_FACEBOOK_URL =
   'https://www.facebook.com/profile.php?id=61591060778332'
@@ -48,7 +50,7 @@ export default function StorePage() {
         <div className="mt-14 grid gap-8 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
           <div>
             <div className="inline-flex rounded-full border border-orange-200 bg-white/75 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-orange-700 shadow-sm backdrop-blur">
-              Próximamente · Tienda RAMX
+              Tienda RAMX
             </div>
 
             <h1 className="mt-6 max-w-3xl text-5xl font-semibold tracking-[-0.06em] text-neutral-950 sm:text-6xl lg:text-7xl">
@@ -56,21 +58,19 @@ export default function StorePage() {
             </h1>
 
             <p className="mt-6 max-w-2xl text-base leading-8 text-neutral-600 sm:text-lg">
-              Estamos preparando productos físicos RAMX para conectar el perfil
+              Ya puedes solicitar productos físicos RAMX para conectar el perfil
               digital de tu mascota con placas QR, identificadores NFC y
               accesorios diseñados con una estética premium, sencilla y
               funcional.
             </p>
 
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a
-                href={WHATSAPP_URL}
-                target="_blank"
-                rel="noreferrer"
+              <Link
+                href="/tienda/order"
                 className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-6 py-4 text-sm font-semibold text-white shadow-xl shadow-neutral-950/15 transition hover:-translate-y-0.5 hover:bg-neutral-800"
               >
-                Avisarme cuando esté lista
-              </a>
+                Solicitar producto
+              </Link>
 
               <Link
                 href="/dashboard"
@@ -145,21 +145,16 @@ export default function StorePage() {
         </div>
 
         <section className="mt-12 grid gap-4 sm:grid-cols-3">
-          <ProductCard
-            title="Placa QR"
-            description="Ideal para collar. Escaneo rápido al perfil público."
-            status="Próximamente"
-          />
-          <ProductCard
-            title="Placa QR + NFC"
-            description="Más cómoda para lectura con teléfonos compatibles."
-            status="Próximamente"
-          />
-          <ProductCard
-            title="Kit RAMX"
-            description="Placa, QR digital y material de identificación."
-            status="Próximamente"
-          />
+          {RAMX_STORE_PRODUCTS.map((product) => (
+            <ProductCard
+              key={product.type}
+              type={product.type}
+              title={product.title}
+              price={formatMxn(product.price)}
+              imageSrc={product.imageSrc}
+              description={product.description}
+            />
+          ))}
         </section>
 
         <footer className="mt-14 flex flex-col gap-4 border-t border-neutral-200 pt-8 text-sm text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
@@ -200,29 +195,47 @@ function StoreFeature({ title, text }: { title: string; text: string }) {
 }
 
 function ProductCard({
+  type,
   title,
+  price,
+  imageSrc,
   description,
-  status,
 }: {
+  type: string
   title: string
+  price: string
+  imageSrc: string
   description: string
-  status: string
 }) {
   return (
-    <article className="rounded-[28px] border border-white/80 bg-white/80 p-5 shadow-xl shadow-slate-900/5 backdrop-blur">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-xl">
-        ✦
+    <article className="overflow-hidden rounded-[28px] border border-white/80 bg-white/80 shadow-xl shadow-slate-900/5 backdrop-blur">
+      <Image
+        src={imageSrc}
+        alt={title}
+        width={900}
+        height={700}
+        className="aspect-[4/3] w-full object-cover"
+      />
+
+      <div className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="text-lg font-semibold tracking-tight text-neutral-950">
+            {title}
+          </h3>
+          <p className="shrink-0 rounded-full bg-neutral-950 px-3 py-1 text-xs font-semibold text-white">
+            {price}
+          </p>
+        </div>
+
+        <p className="mt-2 text-sm leading-6 text-neutral-600">{description}</p>
+
+        <Link
+          href={`/tienda/order?product=${type}`}
+          className="mt-5 inline-flex rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
+        >
+          Solicitar
+        </Link>
       </div>
-
-      <h3 className="mt-5 text-lg font-semibold tracking-tight text-neutral-950">
-        {title}
-      </h3>
-
-      <p className="mt-2 text-sm leading-6 text-neutral-600">{description}</p>
-
-      <p className="mt-5 inline-flex rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-600">
-        {status}
-      </p>
     </article>
   )
 }

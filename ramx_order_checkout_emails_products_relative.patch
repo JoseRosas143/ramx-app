@@ -1,0 +1,1417 @@
+diff -urN a/app/admin/orders/page.tsx b/app/admin/orders/page.tsx
+--- a/app/admin/orders/page.tsx	2026-07-03 08:24:13.000000000 +0000
++++ b/app/admin/orders/page.tsx	2026-07-03 08:54:57.665219941 +0000
+@@ -120,7 +120,7 @@
+               Órdenes RAMX
+             </h1>
+             <p className="mt-1 text-sm leading-6 text-neutral-600">
+-              Solicitudes internas de placa QR/NFC, microchip y Kit RAMX.
++              Solicitudes de Placa Inteligente NFC/Qr y combos de identidad RAMX.
+             </p>
+           </div>
+ 
+@@ -239,7 +239,7 @@
+                 </div>
+               </div>
+ 
+-              <div className="mt-5 grid gap-4 lg:grid-cols-3">
++              <div className="mt-5 grid gap-4 lg:grid-cols-4">
+                 <InfoBox
+                   label="Producto"
+                   value={(order.ramx_order_items || [])
+@@ -255,9 +255,13 @@
+                 <InfoBox
+                   label="Entrega"
+                   value={`${deliveryLabel(order.shipping_method)}${
+-                    order.shipping_address ? ` · ${order.shipping_address}` : ''
++                    order.shipping_address ? `\n${order.shipping_address}` : ''
+                   }`}
+                 />
++                <InfoBox
++                  label="Total"
++                  value={formatMxn(Number(order.total_amount || 0), order.currency)}
++                />
+               </div>
+ 
+               {order.notes || order.admin_notes ? (
+@@ -364,7 +368,7 @@
+       <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+         {label}
+       </p>
+-      <p className="mt-1 text-sm leading-6 text-neutral-800">{value || '—'}</p>
++      <p className="mt-1 whitespace-pre-line text-sm leading-6 text-neutral-800">{value || '—'}</p>
+     </div>
+   )
+ }
+@@ -388,6 +392,14 @@
+   )
+ }
+ 
++function formatMxn(amount: number, currency = 'MXN') {
++  return new Intl.NumberFormat('es-MX', {
++    style: 'currency',
++    currency: currency || 'MXN',
++    maximumFractionDigits: 0,
++  }).format(amount)
++}
++
+ function deliveryLabel(value: string) {
+   const labels: Record<string, string> = {
+     to_confirm: 'Confirmar por WhatsApp',
+diff -urN a/app/tienda/order/actions.ts b/app/tienda/order/actions.ts
+--- a/app/tienda/order/actions.ts	2026-07-03 08:24:13.000000000 +0000
++++ b/app/tienda/order/actions.ts	2026-07-03 08:54:32.580310946 +0000
+@@ -3,14 +3,12 @@
+ import { redirect } from 'next/navigation'
+ import { createClient } from '@/lib/supabase/server'
+ import { createAdminClient } from '@/lib/supabase/admin'
+-
+-const PRODUCT_LABELS: Record<string, string> = {
+-  placa_qr_nfc: 'Placa QR/NFC',
+-  microchip_placa_qr_nfc: 'Microchip + placa QR/NFC',
+-  kit_ramx: 'Kit RAMX',
+-}
+-
+-const PRODUCT_TYPES = Object.keys(PRODUCT_LABELS)
++import {
++  getRamxStoreProduct,
++  RAMX_STORE_PRODUCT_TYPES,
++  type RamxStoreProductType,
++} from '@/lib/ramx-store-products'
++import { sendRamxOrderEmails } from '@/lib/ramx-order-emails'
+ 
+ export async function createPhysicalProductOrderAction(formData: FormData) {
+   const supabase = await createClient()
+@@ -20,19 +18,15 @@
+     data: { user },
+   } = await supabase.auth.getUser()
+ 
+-  if (!user) {
+-    redirect('/auth/login')
+-  }
+-
+   const productType = cleanText(formData.get('product_type'))
+   const petId = cleanText(formData.get('pet_id'))
++  const petName = cleanText(formData.get('pet_name'))
+   const customerName = cleanText(formData.get('customer_name'))
+-  const customerEmail =
+-    cleanText(formData.get('customer_email')) || user.email || null
++  const customerEmail = normalizeEmail(formData.get('customer_email'))
+   const customerPhone = cleanText(formData.get('customer_phone'))
+   const shippingMethod =
+     cleanText(formData.get('shipping_method')) || 'to_confirm'
+-  const shippingAddress = cleanText(formData.get('shipping_address'))
++  const shippingAddress = buildShippingAddress(formData)
+   const notes = cleanText(formData.get('notes'))
+ 
+   const quantityRaw = Number(formData.get('quantity') || 1)
+@@ -40,40 +34,79 @@
+     ? Math.min(Math.max(Math.floor(quantityRaw), 1), 20)
+     : 1
+ 
+-  if (!productType || !PRODUCT_TYPES.includes(productType)) {
++  if (
++    !productType ||
++    !RAMX_STORE_PRODUCT_TYPES.includes(productType as RamxStoreProductType)
++  ) {
+     throw new Error('Selecciona un producto válido.')
+   }
+ 
+-  if (!petId) {
+-    throw new Error('Selecciona una mascota.')
++  const product = getRamxStoreProduct(productType)
++
++  if (!product) {
++    throw new Error('Selecciona un producto válido.')
+   }
+ 
+   if (!customerName) {
+     throw new Error('Captura el nombre de contacto.')
+   }
+ 
++  if (!customerEmail) {
++    throw new Error('Captura un correo válido para enviar la confirmación.')
++  }
++
+   if (!customerPhone) {
+     throw new Error('Captura un teléfono o WhatsApp de contacto.')
+   }
+ 
+-  const { data: pet, error: petError } = await admin
+-    .from('pets')
+-    .select('id, name, public_slug, primary_tutor_profile_id')
+-    .eq('id', petId)
+-    .maybeSingle()
++  if (!shippingAddress) {
++    throw new Error('Captura la dirección de entrega.')
++  }
++
++  let pet: {
++    id: string
++    name: string
++    public_slug: string | null
++    microchip_number: string | null
++    internal_id: string | null
++    primary_tutor_profile_id: string | null
++  } | null = null
++
++  if (petId) {
++    if (!user) {
++      throw new Error('Inicia sesión para vincular una mascota registrada.')
++    }
++
++    const { data: selectedPet, error: petError } = await admin
++      .from('pets')
++      .select(
++        'id, name, public_slug, microchip_number, internal_id, primary_tutor_profile_id'
++      )
++      .eq('id', petId)
++      .maybeSingle()
++
++    if (
++      petError ||
++      !selectedPet ||
++      selectedPet.primary_tutor_profile_id !== user.id
++    ) {
++      throw new Error('No tienes permiso para crear una orden para esta mascota.')
++    }
+ 
+-  if (petError || !pet || pet.primary_tutor_profile_id !== user.id) {
+-    throw new Error('No tienes permiso para crear una orden para esta mascota.')
++    pet = selectedPet
+   }
+ 
+   const orderNumber = await generateOrderNumber(admin)
+   const now = new Date().toISOString()
++  const totalAmount = product.price * quantity
++  const petReference = buildPetReference(pet, petName)
++  const storedNotes = buildStoredNotes({ petName, notes })
+ 
+   const { data: order, error: orderError } = await admin
+     .from('ramx_orders')
+     .insert({
+-      profile_id: user.id,
+-      pet_id: pet.id,
++      profile_id: user?.id || null,
++      pet_id: pet?.id || null,
+       order_number: orderNumber,
+       status: 'pending',
+       payment_status: 'unpaid',
+@@ -82,9 +115,9 @@
+       customer_phone: customerPhone,
+       shipping_method: shippingMethod,
+       shipping_address: shippingAddress,
+-      notes,
++      notes: storedNotes,
+       admin_notes: null,
+-      total_amount: 0,
++      total_amount: totalAmount,
+       currency: 'MXN',
+       created_at: now,
+       updated_at: now,
+@@ -98,10 +131,10 @@
+ 
+   const { error: itemError } = await admin.from('ramx_order_items').insert({
+     order_id: order.id,
+-    product_type: productType,
+-    product_name: PRODUCT_LABELS[productType],
++    product_type: product.type,
++    product_name: product.title,
+     quantity,
+-    unit_price: 0,
++    unit_price: product.price,
+     created_at: now,
+   })
+ 
+@@ -109,6 +142,26 @@
+     throw new Error(itemError.message)
+   }
+ 
++  try {
++    await sendRamxOrderEmails({
++      orderNumber: order.order_number,
++      productName: product.title,
++      unitPrice: product.price,
++      quantity,
++      totalAmount,
++      customerName,
++      customerEmail,
++      customerPhone,
++      petName: pet?.name || petName,
++      petReference,
++      shippingMethod,
++      shippingAddress,
++      notes,
++    })
++  } catch (emailError) {
++    console.error('RAMX order email error:', emailError)
++  }
++
+   redirect(
+     `/tienda/order/success?order=${encodeURIComponent(order.order_number)}`
+   )
+@@ -138,8 +191,63 @@
+   return `${prefix}-${next}`
+ }
+ 
++function buildShippingAddress(formData: FormData) {
++  const street = cleanText(formData.get('shipping_street'))
++  const neighborhood = cleanText(formData.get('shipping_neighborhood'))
++  const state = cleanText(formData.get('shipping_state'))
++  const postalCode = cleanText(formData.get('shipping_postal_code'))
++
++  const lines = [
++    street ? `Calle y número: ${street}` : null,
++    neighborhood ? `Colonia: ${neighborhood}` : null,
++    state ? `Estado: ${state}` : null,
++    postalCode ? `C.P.: ${postalCode}` : null,
++  ].filter(Boolean)
++
++  return lines.length > 0 ? lines.join('\n') : null
++}
++
++function buildPetReference(
++  pet: {
++    name: string
++    microchip_number: string | null
++    internal_id: string | null
++  } | null,
++  petName: string | null
++) {
++  if (pet) {
++    const id = pet.microchip_number || pet.internal_id || 'RAMX'
++    return `${pet.name} · ${id}`
++  }
++
++  return petName ? `${petName} · Pendiente de vincular` : null
++}
++
++function buildStoredNotes({
++  petName,
++  notes,
++}: {
++  petName: string | null
++  notes: string | null
++}) {
++  const lines = [
++    petName ? `Mascota sin vincular: ${petName}` : null,
++    notes ? `Notas del comprador: ${notes}` : null,
++  ].filter(Boolean)
++
++  return lines.length > 0 ? lines.join('\n') : null
++}
++
++function normalizeEmail(value: FormDataEntryValue | null) {
++  const email = cleanText(value)?.toLowerCase() || null
++
++  if (!email) return null
++
++  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null
++}
++
+ function cleanText(value: FormDataEntryValue | null) {
+   const text = String(value || '').trim()
+ 
+   return text.length > 0 ? text : null
+-}
+\ No newline at end of file
++}
+diff -urN a/app/tienda/order/page.tsx b/app/tienda/order/page.tsx
+--- a/app/tienda/order/page.tsx	2026-07-03 08:24:13.000000000 +0000
++++ b/app/tienda/order/page.tsx	2026-07-03 08:54:57.664761468 +0000
+@@ -1,33 +1,13 @@
++import Image from 'next/image'
+ import Link from 'next/link'
+-import { redirect } from 'next/navigation'
+ import { createClient } from '@/lib/supabase/server'
+ import { createAdminClient } from '@/lib/supabase/admin'
++import {
++  RAMX_STORE_PRODUCTS,
++  formatMxn,
++} from '@/lib/ramx-store-products'
+ import { createPhysicalProductOrderAction } from './actions'
+ 
+-const PRODUCTS = [
+-  {
+-    type: 'placa_qr_nfc',
+-    title: 'Placa QR/NFC',
+-    description:
+-      'Placa física para collar con QR y NFC vinculables al perfil público RAMX.',
+-    includes: ['QR único', 'NFC integrado', 'Activación RAMX', 'Perfil público'],
+-  },
+-  {
+-    type: 'microchip_placa_qr_nfc',
+-    title: 'Microchip + placa QR/NFC',
+-    description:
+-      'Ideal para identificación doble: microchip más placa RAMX con QR/NFC.',
+-    includes: ['Microchip', 'Placa QR/NFC', 'Activación RAMX', 'Perfil público'],
+-  },
+-  {
+-    type: 'kit_ramx',
+-    title: 'Kit RAMX',
+-    description:
+-      'Paquete completo de identidad física y digital para mascota.',
+-    includes: ['Placa QR/NFC', 'Pasaporte', 'Certificado', 'Microchip'],
+-  },
+-] as const
+-
+ type PageProps = {
+   searchParams?: Promise<{
+     product?: string
+@@ -39,9 +19,11 @@
+ }: PageProps) {
+   const query = searchParams ? await searchParams : {}
+ 
+-  const selectedProduct = PRODUCTS.some((item) => item.type === query.product)
++  const selectedProduct = RAMX_STORE_PRODUCTS.some(
++    (item) => item.type === query.product
++  )
+     ? query.product
+-    : PRODUCTS[0].type
++    : RAMX_STORE_PRODUCTS[0].type
+ 
+   const supabase = await createClient()
+   const admin = createAdminClient()
+@@ -50,25 +32,32 @@
+     data: { user },
+   } = await supabase.auth.getUser()
+ 
+-  if (!user) {
+-    redirect('/auth/login')
+-  }
+-
+-  const { data: pets, error: petsError } = await admin
+-    .from('pets')
+-    .select('id, name, species, public_slug, microchip_number, internal_id')
+-    .eq('primary_tutor_profile_id', user.id)
+-    .order('created_at', { ascending: false })
++  let petOptions: Array<{
++    id: string
++    name: string
++    species: string | null
++    public_slug: string | null
++    microchip_number: string | null
++    internal_id: string | null
++  }> = []
++
++  if (user) {
++    const { data: pets, error: petsError } = await admin
++      .from('pets')
++      .select('id, name, species, public_slug, microchip_number, internal_id')
++      .eq('primary_tutor_profile_id', user.id)
++      .order('created_at', { ascending: false })
++
++    if (petsError) {
++      console.error('RAMX tienda order pets error:', petsError.message)
++    }
+ 
+-  if (petsError) {
+-    console.error('RAMX tienda order pets error:', petsError.message)
++    petOptions = pets || []
+   }
+ 
+-  const petOptions = pets || []
+-
+   return (
+     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
+-      <div className="mx-auto max-w-5xl space-y-6">
++      <div className="mx-auto max-w-6xl space-y-6">
+         <div className="flex flex-wrap items-center justify-between gap-3">
+           <Link
+             href="/tienda"
+@@ -77,12 +66,23 @@
+             ← Volver a tienda
+           </Link>
+ 
+-          <Link
+-            href="/dashboard"
+-            className="rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+-          >
+-            Dashboard
+-          </Link>
++          <div className="flex flex-wrap gap-2">
++            {user ? (
++              <Link
++                href="/dashboard"
++                className="rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
++              >
++                Dashboard
++              </Link>
++            ) : (
++              <Link
++                href="/auth/login"
++                className="rounded-2xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-800 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
++              >
++                Iniciar sesión
++              </Link>
++            )}
++          </div>
+         </div>
+ 
+         <section className="rounded-[34px] border border-white/80 bg-white/95 p-6 shadow-2xl backdrop-blur sm:p-8">
+@@ -94,16 +94,16 @@
+             Solicitar producto físico
+           </h1>
+ 
+-          <p className="mt-3 max-w-2xl text-sm leading-6 text-neutral-600">
+-            Selecciona el producto para tu mascota. Esta primera versión crea una
+-            solicitud interna; el equipo RAMX confirmará disponibilidad, diseño y
+-            entrega antes de cobrar o producir.
++          <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
++            Elige tu producto RAMX y captura tus datos de entrega. Puedes
++            comprar aunque todavía no tengas cuenta; si ya tienes una mascota
++            registrada, también puedes vincular la solicitud desde aquí.
+           </p>
+         </section>
+ 
+         <form
+           action={createPhysicalProductOrderAction}
+-          className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]"
++          className="grid gap-6 lg:grid-cols-[1.12fr_0.88fr]"
+         >
+           <section className="rounded-[30px] border border-white/80 bg-white/95 p-5 shadow-xl sm:p-6">
+             <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
+@@ -111,38 +111,56 @@
+             </h2>
+ 
+             <div className="mt-5 grid gap-4">
+-              {PRODUCTS.map((product) => (
++              {RAMX_STORE_PRODUCTS.map((product) => (
+                 <label
+                   key={product.type}
+-                  className="block cursor-pointer rounded-3xl border border-neutral-200 bg-neutral-50/70 p-4 transition hover:border-neutral-400 hover:bg-white"
++                  className="block cursor-pointer rounded-[28px] border border-neutral-200 bg-neutral-50/70 p-3 transition hover:border-neutral-400 hover:bg-white sm:p-4"
+                 >
+-                  <div className="flex items-start gap-3">
+-                    <input
+-                      type="radio"
+-                      name="product_type"
+-                      value={product.type}
+-                      defaultChecked={product.type === selectedProduct}
+-                      className="mt-1 h-4 w-4"
+-                    />
++                  <div className="grid gap-4 sm:grid-cols-[150px_1fr] sm:items-center">
++                    <div className="overflow-hidden rounded-3xl border border-white bg-white shadow-sm">
++                      <Image
++                        src={product.imageSrc}
++                        alt={product.title}
++                        width={900}
++                        height={700}
++                        className="aspect-[4/3] w-full object-cover"
++                      />
++                    </div>
+ 
+-                    <div className="min-w-0 flex-1">
+-                      <p className="text-base font-semibold text-neutral-950">
+-                        {product.title}
+-                      </p>
+-
+-                      <p className="mt-1 text-sm leading-6 text-neutral-600">
+-                        {product.description}
+-                      </p>
+-
+-                      <div className="mt-3 flex flex-wrap gap-2">
+-                        {product.includes.map((item) => (
+-                          <span
+-                            key={item}
+-                            className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-neutral-600 shadow-sm"
+-                          >
+-                            {item}
+-                          </span>
+-                        ))}
++                    <div className="flex items-start gap-3">
++                      <input
++                        type="radio"
++                        name="product_type"
++                        value={product.type}
++                        defaultChecked={product.type === selectedProduct}
++                        className="mt-1 h-4 w-4 shrink-0"
++                      />
++
++                      <div className="min-w-0 flex-1">
++                        <div className="flex flex-wrap items-start justify-between gap-2">
++                          <p className="text-base font-semibold text-neutral-950">
++                            {product.title}
++                          </p>
++
++                          <p className="rounded-full bg-neutral-950 px-3 py-1 text-xs font-semibold text-white">
++                            {formatMxn(product.price)}
++                          </p>
++                        </div>
++
++                        <p className="mt-1 text-sm leading-6 text-neutral-600">
++                          {product.description}
++                        </p>
++
++                        <div className="mt-3 flex flex-wrap gap-2">
++                          {product.includes.map((item) => (
++                            <span
++                              key={item}
++                              className="rounded-full border border-white bg-white px-3 py-1 text-xs font-medium text-neutral-600 shadow-sm"
++                            >
++                              {item}
++                            </span>
++                          ))}
++                        </div>
+                       </div>
+                     </div>
+                   </div>
+@@ -168,21 +186,20 @@
+ 
+           <section className="rounded-[30px] border border-white/80 bg-white/95 p-5 shadow-xl sm:p-6">
+             <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
+-              2. Mascota y contacto
++              2. Comprador y entrega
+             </h2>
+ 
+             <div className="mt-5 space-y-4">
+               <label className="block space-y-2">
+                 <span className="text-sm font-medium text-neutral-700">
+-                  Mascota
++                  Mascota registrada, si aplica
+                 </span>
+ 
+                 <select
+                   name="pet_id"
+-                  required
+                   className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
+                 >
+-                  <option value="">Selecciona mascota</option>
++                  <option value="">Comprador nuevo / vincular después</option>
+ 
+                   {petOptions.map((pet) => (
+                     <option key={pet.id} value={pet.id}>
+@@ -193,27 +210,33 @@
+                 </select>
+               </label>
+ 
+-              {petOptions.length === 0 ? (
+-                <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4">
+-                  <p className="text-sm font-semibold text-amber-950">
+-                    Primero registra una mascota
++              {!user ? (
++                <div className="rounded-3xl border border-sky-200 bg-sky-50 p-4">
++                  <p className="text-sm font-semibold text-sky-950">
++                    Puedes comprar sin cuenta
+                   </p>
+ 
+-                  <p className="mt-1 text-sm leading-6 text-amber-800">
+-                    Necesitas una mascota para vincular la placa, microchip o kit.
++                  <p className="mt-1 text-sm leading-6 text-sky-800">
++                    Después podrás activar el QR/NFC y vincularlo a la mascota
++                    cuando recibas tu producto.
+                   </p>
+-
+-                  <Link
+-                    href="/dashboard/pets/new"
+-                    className="mt-3 inline-flex rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white"
+-                  >
+-                    Agregar mascota
+-                  </Link>
+                 </div>
+               ) : null}
+ 
+               <label className="block space-y-2">
+                 <span className="text-sm font-medium text-neutral-700">
++                  Nombre de la mascota, si aún no está registrada
++                </span>
++
++                <input
++                  name="pet_name"
++                  placeholder="Ej. Niña, Max, Luna"
++                  className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
++                />
++              </label>
++
++              <label className="block space-y-2">
++                <span className="text-sm font-medium text-neutral-700">
+                   Nombre de contacto
+                 </span>
+ 
+@@ -227,13 +250,14 @@
+ 
+               <label className="block space-y-2">
+                 <span className="text-sm font-medium text-neutral-700">
+-                  Correo
++                  Correo para confirmación
+                 </span>
+ 
+                 <input
+                   name="customer_email"
+                   type="email"
+-                  defaultValue={user.email || ''}
++                  required
++                  defaultValue={user?.email || ''}
+                   placeholder="correo@ejemplo.com"
+                   className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
+                 />
+@@ -268,18 +292,62 @@
+                 </select>
+               </label>
+ 
+-              <label className="block space-y-2">
+-                <span className="text-sm font-medium text-neutral-700">
+-                  Dirección o zona de entrega
+-                </span>
++              <div className="rounded-3xl border border-neutral-200 bg-neutral-50/70 p-4">
++                <p className="text-sm font-semibold text-neutral-950">
++                  Dirección de entrega
++                </p>
++
++                <div className="mt-4 grid gap-3 sm:grid-cols-2">
++                  <label className="block space-y-2 sm:col-span-2">
++                    <span className="text-sm font-medium text-neutral-700">
++                      Calle y número
++                    </span>
++                    <input
++                      name="shipping_street"
++                      required
++                      placeholder="Ej. Av. Reforma 123"
++                      className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
++                    />
++                  </label>
+ 
+-                <textarea
+-                  name="shipping_address"
+-                  rows={3}
+-                  placeholder="Opcional por ahora"
+-                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-950"
+-                />
+-              </label>
++                  <label className="block space-y-2">
++                    <span className="text-sm font-medium text-neutral-700">
++                      Colonia
++                    </span>
++                    <input
++                      name="shipping_neighborhood"
++                      required
++                      placeholder="Ej. Centro"
++                      className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
++                    />
++                  </label>
++
++                  <label className="block space-y-2">
++                    <span className="text-sm font-medium text-neutral-700">
++                      Estado
++                    </span>
++                    <input
++                      name="shipping_state"
++                      required
++                      placeholder="Ej. Puebla"
++                      className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
++                    />
++                  </label>
++
++                  <label className="block space-y-2">
++                    <span className="text-sm font-medium text-neutral-700">
++                      C.P.
++                    </span>
++                    <input
++                      name="shipping_postal_code"
++                      required
++                      inputMode="numeric"
++                      placeholder="Ej. 72000"
++                      className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
++                    />
++                  </label>
++                </div>
++              </div>
+ 
+               <label className="block space-y-2">
+                 <span className="text-sm font-medium text-neutral-700">
+@@ -296,8 +364,7 @@
+ 
+               <button
+                 type="submit"
+-                disabled={petOptions.length === 0}
+-                className="inline-flex w-full items-center justify-center rounded-2xl bg-neutral-950 px-5 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800 hover:shadow-lg disabled:opacity-60"
++                className="inline-flex w-full items-center justify-center rounded-2xl bg-neutral-950 px-5 py-4 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800 hover:shadow-lg"
+               >
+                 Crear solicitud RAMX
+               </button>
+@@ -307,4 +374,4 @@
+       </div>
+     </main>
+   )
+-}
+\ No newline at end of file
++}
+diff -urN a/app/tienda/order/success/page.tsx b/app/tienda/order/success/page.tsx
+--- a/app/tienda/order/success/page.tsx	2026-07-03 08:37:18.000000000 +0000
++++ b/app/tienda/order/success/page.tsx	2026-07-03 08:55:28.274350107 +0000
+@@ -36,17 +36,18 @@
+         </p>
+ 
+         <p className="mt-5 text-sm leading-6 text-neutral-600">
+-          El equipo RAMX revisará los datos del producto, disponibilidad,
+-          diseño y entrega. Después te contactaremos para confirmar el siguiente
+-          paso.
++          También enviamos una confirmación al correo capturado y una
++          notificación interna al equipo RAMX. Revisaremos los datos del
++          producto, disponibilidad, diseño y entrega antes de confirmar el
++          siguiente paso.
+         </p>
+ 
+         <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
+           <Link
+-            href="/dashboard"
++            href="/tienda/order"
+             className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
+           >
+-            Ir al dashboard
++            Crear otra solicitud
+           </Link>
+ 
+           <Link
+diff -urN a/app/tienda/page.tsx b/app/tienda/page.tsx
+--- a/app/tienda/page.tsx	2026-07-03 08:24:13.000000000 +0000
++++ b/app/tienda/page.tsx	2026-07-03 08:55:28.274029159 +0000
+@@ -1,4 +1,6 @@
++import Image from 'next/image'
+ import Link from 'next/link'
++import { RAMX_STORE_PRODUCTS, formatMxn } from '@/lib/ramx-store-products'
+ 
+ const RAMX_FACEBOOK_URL =
+   'https://www.facebook.com/profile.php?id=61591060778332'
+@@ -48,7 +50,7 @@
+         <div className="mt-14 grid gap-8 lg:grid-cols-[1.08fr_0.92fr] lg:items-center">
+           <div>
+             <div className="inline-flex rounded-full border border-orange-200 bg-white/75 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-orange-700 shadow-sm backdrop-blur">
+-              Próximamente · Tienda RAMX
++              Tienda RAMX
+             </div>
+ 
+             <h1 className="mt-6 max-w-3xl text-5xl font-semibold tracking-[-0.06em] text-neutral-950 sm:text-6xl lg:text-7xl">
+@@ -56,21 +58,19 @@
+             </h1>
+ 
+             <p className="mt-6 max-w-2xl text-base leading-8 text-neutral-600 sm:text-lg">
+-              Estamos preparando productos físicos RAMX para conectar el perfil
++              Ya puedes solicitar productos físicos RAMX para conectar el perfil
+               digital de tu mascota con placas QR, identificadores NFC y
+               accesorios diseñados con una estética premium, sencilla y
+               funcional.
+             </p>
+ 
+             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+-              <a
+-                href={WHATSAPP_URL}
+-                target="_blank"
+-                rel="noreferrer"
++              <Link
++                href="/tienda/order"
+                 className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-6 py-4 text-sm font-semibold text-white shadow-xl shadow-neutral-950/15 transition hover:-translate-y-0.5 hover:bg-neutral-800"
+               >
+-                Avisarme cuando esté lista
+-              </a>
++                Solicitar producto
++              </Link>
+ 
+               <Link
+                 href="/dashboard"
+@@ -145,21 +145,16 @@
+         </div>
+ 
+         <section className="mt-12 grid gap-4 sm:grid-cols-3">
+-          <ProductCard
+-            title="Placa QR"
+-            description="Ideal para collar. Escaneo rápido al perfil público."
+-            status="Próximamente"
+-          />
+-          <ProductCard
+-            title="Placa QR + NFC"
+-            description="Más cómoda para lectura con teléfonos compatibles."
+-            status="Próximamente"
+-          />
+-          <ProductCard
+-            title="Kit RAMX"
+-            description="Placa, QR digital y material de identificación."
+-            status="Próximamente"
+-          />
++          {RAMX_STORE_PRODUCTS.map((product) => (
++            <ProductCard
++              key={product.type}
++              type={product.type}
++              title={product.title}
++              price={formatMxn(product.price)}
++              imageSrc={product.imageSrc}
++              description={product.description}
++            />
++          ))}
+         </section>
+ 
+         <footer className="mt-14 flex flex-col gap-4 border-t border-neutral-200 pt-8 text-sm text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
+@@ -200,29 +195,47 @@
+ }
+ 
+ function ProductCard({
++  type,
+   title,
++  price,
++  imageSrc,
+   description,
+-  status,
+ }: {
++  type: string
+   title: string
++  price: string
++  imageSrc: string
+   description: string
+-  status: string
+ }) {
+   return (
+-    <article className="rounded-[28px] border border-white/80 bg-white/80 p-5 shadow-xl shadow-slate-900/5 backdrop-blur">
+-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-xl">
+-        ✦
+-      </div>
++    <article className="overflow-hidden rounded-[28px] border border-white/80 bg-white/80 shadow-xl shadow-slate-900/5 backdrop-blur">
++      <Image
++        src={imageSrc}
++        alt={title}
++        width={900}
++        height={700}
++        className="aspect-[4/3] w-full object-cover"
++      />
++
++      <div className="p-5">
++        <div className="flex items-start justify-between gap-3">
++          <h3 className="text-lg font-semibold tracking-tight text-neutral-950">
++            {title}
++          </h3>
++          <p className="shrink-0 rounded-full bg-neutral-950 px-3 py-1 text-xs font-semibold text-white">
++            {price}
++          </p>
++        </div>
++
++        <p className="mt-2 text-sm leading-6 text-neutral-600">{description}</p>
+ 
+-      <h3 className="mt-5 text-lg font-semibold tracking-tight text-neutral-950">
+-        {title}
+-      </h3>
+-
+-      <p className="mt-2 text-sm leading-6 text-neutral-600">{description}</p>
+-
+-      <p className="mt-5 inline-flex rounded-full bg-neutral-100 px-3 py-1 text-xs font-semibold text-neutral-600">
+-        {status}
+-      </p>
++        <Link
++          href={`/tienda/order?product=${type}`}
++          className="mt-5 inline-flex rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
++        >
++          Solicitar
++        </Link>
++      </div>
+     </article>
+   )
+ }
+\ No newline at end of file
+diff -urN a/lib/ramx-order-emails.ts b/lib/ramx-order-emails.ts
+--- a/lib/ramx-order-emails.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/lib/ramx-order-emails.ts	2026-07-03 08:53:07.072184572 +0000
+@@ -0,0 +1,270 @@
++import 'server-only'
++import nodemailer from 'nodemailer'
++import { formatMxn } from '@/lib/ramx-store-products'
++
++const RAMX_BANNER_URL =
++  process.env.RAMX_ORDER_EMAIL_BANNER_URL ||
++  'https://esxkbfyphnthqcxfpkte.supabase.co/storage/v1/object/public/Brand%20kit/5B003718-18AF-4F78-A612-37EFDB637D53.png'
++
++const DEFAULT_ADMIN_EMAIL = 'ramx@bonica.com.mx'
++
++type OrderEmailInput = {
++  orderNumber: string
++  productName: string
++  unitPrice: number
++  quantity: number
++  totalAmount: number
++  customerName: string
++  customerEmail: string
++  customerPhone: string
++  petName?: string | null
++  petReference?: string | null
++  shippingMethod: string
++  shippingAddress: string
++  notes?: string | null
++}
++
++let transporterCache: nodemailer.Transporter | null = null
++
++function getTransporter() {
++  if (transporterCache) return transporterCache
++
++  const host = process.env.SMTP_HOST
++  const port = Number(process.env.SMTP_PORT || 587)
++  const user = process.env.SMTP_USER
++  const pass = process.env.SMTP_PASS
++  const secure = process.env.SMTP_SECURE === 'true' || port === 465
++
++  if (!host || !user || !pass) {
++    return null
++  }
++
++  transporterCache = nodemailer.createTransport({
++    host,
++    port,
++    secure,
++    auth: {
++      user,
++      pass,
++    },
++  })
++
++  return transporterCache
++}
++
++function getFromHeader() {
++  const fromHeader = process.env.SMTP_FROM
++
++  if (fromHeader) return fromHeader
++
++  const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER
++  const fromName = process.env.SMTP_FROM_NAME || 'RAMX'
++
++  return fromEmail ? `"${fromName}" <${fromEmail}>` : null
++}
++
++export async function sendRamxOrderEmails(input: OrderEmailInput) {
++  const transporter = getTransporter()
++  const from = getFromHeader()
++
++  if (!transporter || !from) {
++    console.warn('SMTP no configurado. Se omiten correos de orden RAMX.')
++    return { sent: false, reason: 'smtp-not-configured' as const }
++  }
++
++  const adminEmail =
++    process.env.RAMX_ORDERS_NOTIFICATION_EMAIL || DEFAULT_ADMIN_EMAIL
++
++  await Promise.all([
++    transporter.sendMail({
++      from,
++      to: input.customerEmail,
++      subject: `RAMX · Recibimos tu solicitud ${input.orderNumber}`,
++      html: buildCustomerHtml(input),
++      text: buildCustomerText(input),
++    }),
++    transporter.sendMail({
++      from,
++      to: adminEmail,
++      subject: `RAMX · Nueva orden ${input.orderNumber} · ${input.productName}`,
++      html: buildAdminHtml(input),
++      text: buildAdminText(input),
++      replyTo: input.customerEmail,
++    }),
++  ])
++
++  return { sent: true as const }
++}
++
++function buildCustomerHtml(input: OrderEmailInput) {
++  return baseEmailShell({
++    eyebrow: 'RAMX · Solicitud recibida',
++    title: `Gracias, ${input.customerName}`,
++    intro:
++      'Recibimos tu solicitud de producto físico RAMX. Revisaremos los datos y te contactaremos para confirmar diseño, disponibilidad, forma de pago y entrega.',
++    body: `
++      ${summaryTable([
++        ['Número de solicitud', input.orderNumber],
++        ['Producto', input.productName],
++        ['Cantidad', String(input.quantity)],
++        ['Total estimado', formatMxn(input.totalAmount)],
++        ['Mascota', input.petReference || 'Pendiente de vincular'],
++        ['Entrega', deliveryLabel(input.shippingMethod)],
++        ['Dirección', input.shippingAddress || 'Pendiente de confirmar'],
++      ])}
++
++      <p style="margin:22px 0 0;color:#6b7280;font-size:13px;line-height:1.7;text-align:center;">
++        Este correo confirma que tu solicitud fue registrada. El pago o producción se confirma después por el equipo RAMX.
++      </p>
++    `,
++  })
++}
++
++function buildAdminHtml(input: OrderEmailInput) {
++  return baseEmailShell({
++    eyebrow: 'RAMX · Nueva orden',
++    title: `Nueva orden ${input.orderNumber}`,
++    intro:
++      'Se registró una nueva solicitud de producto físico. Revisa los datos para confirmar diseño, pago, producción y entrega.',
++    body: `
++      ${summaryTable([
++        ['Número de solicitud', input.orderNumber],
++        ['Producto', input.productName],
++        ['Precio unitario', formatMxn(input.unitPrice)],
++        ['Cantidad', String(input.quantity)],
++        ['Total estimado', formatMxn(input.totalAmount)],
++        ['Nombre del comprador', input.customerName],
++        ['Correo', input.customerEmail],
++        ['WhatsApp / teléfono', input.customerPhone],
++        ['Mascota', input.petReference || 'Comprador nuevo / sin vincular'],
++        ['Entrega', deliveryLabel(input.shippingMethod)],
++        ['Dirección', input.shippingAddress || 'Sin dirección capturada'],
++        ['Notas', input.notes || 'Sin notas'],
++      ])}
++    `,
++  })
++}
++
++function baseEmailShell({
++  eyebrow,
++  title,
++  intro,
++  body,
++}: {
++  eyebrow: string
++  title: string
++  intro: string
++  body: string
++}) {
++  return `
++  <div style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
++    <div style="max-width:680px;margin:0 auto;padding:32px 16px;">
++      <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:28px;box-shadow:0 24px 60px rgba(15,23,42,.08);overflow:hidden;">
++        <div style="background:#f3f4f6;min-height:168px;overflow:hidden;">
++          <img
++            src="${escapeHtml(RAMX_BANNER_URL)}"
++            alt="RAMX"
++            style="display:block;width:100%;height:auto;border:0;"
++          />
++        </div>
++
++        <div style="padding:30px;">
++          <p style="margin:0;color:#f97316;font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;text-align:center;">
++            ${escapeHtml(eyebrow)}
++          </p>
++
++          <h1 style="margin:12px 0 0;color:#111827;font-size:28px;line-height:1.2;text-align:center;">
++            ${escapeHtml(title)}
++          </h1>
++
++          <p style="margin:18px auto 0;max-width:540px;color:#4b5563;font-size:15px;line-height:1.7;text-align:center;">
++            ${escapeHtml(intro)}
++          </p>
++
++          ${body}
++
++          <p style="margin:26px 0 0;color:#9ca3af;font-size:12px;line-height:1.6;text-align:center;">
++            RAMX · Registro Animal MX<br />Identidad digital para mascotas.
++          </p>
++        </div>
++      </div>
++    </div>
++  </div>
++  `
++}
++
++function summaryTable(rows: [string, string][]) {
++  return `
++    <div style="margin:26px 0 0;border:1px solid #e5e7eb;border-radius:22px;overflow:hidden;background:#ffffff;">
++      ${rows
++        .map(
++          ([label, value]) => `
++          <div style="display:flex;gap:14px;border-bottom:1px solid #f3f4f6;padding:14px 16px;">
++            <div style="width:42%;color:#6b7280;font-size:13px;font-weight:700;">${escapeHtml(
++              label
++            )}</div>
++            <div style="width:58%;color:#111827;font-size:13px;line-height:1.6;">${escapeHtml(
++              value
++            ).replaceAll('\n', '<br />')}</div>
++          </div>
++        `
++        )
++        .join('')}
++    </div>
++  `
++}
++
++function buildCustomerText(input: OrderEmailInput) {
++  return [
++    `Gracias, ${input.customerName}.`,
++    '',
++    'Recibimos tu solicitud de producto físico RAMX.',
++    `Número de solicitud: ${input.orderNumber}`,
++    `Producto: ${input.productName}`,
++    `Cantidad: ${input.quantity}`,
++    `Total estimado: ${formatMxn(input.totalAmount)}`,
++    `Mascota: ${input.petReference || 'Pendiente de vincular'}`,
++    `Entrega: ${deliveryLabel(input.shippingMethod)}`,
++    `Dirección: ${input.shippingAddress || 'Pendiente de confirmar'}`,
++    '',
++    'El equipo RAMX te contactará para confirmar diseño, pago y entrega.',
++  ].join('\n')
++}
++
++function buildAdminText(input: OrderEmailInput) {
++  return [
++    `Nueva orden ${input.orderNumber}`,
++    '',
++    `Producto: ${input.productName}`,
++    `Precio unitario: ${formatMxn(input.unitPrice)}`,
++    `Cantidad: ${input.quantity}`,
++    `Total estimado: ${formatMxn(input.totalAmount)}`,
++    '',
++    `Comprador: ${input.customerName}`,
++    `Correo: ${input.customerEmail}`,
++    `Teléfono: ${input.customerPhone}`,
++    `Mascota: ${input.petReference || 'Comprador nuevo / sin vincular'}`,
++    `Entrega: ${deliveryLabel(input.shippingMethod)}`,
++    `Dirección: ${input.shippingAddress || 'Sin dirección capturada'}`,
++    `Notas: ${input.notes || 'Sin notas'}`,
++  ].join('\n')
++}
++
++function deliveryLabel(value: string) {
++  const labels: Record<string, string> = {
++    to_confirm: 'Confirmar por WhatsApp',
++    pickup: 'Entrega / recolección local',
++    shipping: 'Envío a domicilio',
++  }
++
++  return labels[value] || 'Confirmar por WhatsApp'
++}
++
++function escapeHtml(value: string) {
++  return value
++    .replaceAll('&', '&amp;')
++    .replaceAll('<', '&lt;')
++    .replaceAll('>', '&gt;')
++    .replaceAll('"', '&quot;')
++    .replaceAll("'", '&#039;')
++}
+diff -urN a/lib/ramx-store-products.ts b/lib/ramx-store-products.ts
+--- a/lib/ramx-store-products.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/lib/ramx-store-products.ts	2026-07-03 08:53:07.064991255 +0000
+@@ -0,0 +1,73 @@
++export type RamxStoreProductType =
++  | 'placa_inteligente_nfc_qr'
++  | 'combo_identificacion_inteligente'
++  | 'combo_identidad_inteligente'
++
++export type RamxStoreProduct = {
++  type: RamxStoreProductType
++  title: string
++  shortTitle: string
++  price: number
++  priceLabel: string
++  description: string
++  imageSrc: string
++  includes: string[]
++}
++
++export const RAMX_STORE_PRODUCTS: RamxStoreProduct[] = [
++  {
++    type: 'placa_inteligente_nfc_qr',
++    title: 'Placa Inteligente NFC/Qr',
++    shortTitle: 'Placa NFC/Qr',
++    price: 199,
++    priceLabel: '$199 MXN',
++    description:
++      'Placa física para collar con lectura QR y NFC, lista para conectar al perfil digital RAMX.',
++    imageSrc: '/images/ramx-placa-inteligente.svg',
++    includes: ['QR único', 'NFC integrado', 'Activación RAMX', 'Perfil público'],
++  },
++  {
++    type: 'combo_identificacion_inteligente',
++    title: 'Combo Identificación Inteligente',
++    shortTitle: 'Combo Identificación',
++    price: 475,
++    priceLabel: '$475 MXN',
++    description:
++      'Identificación física y digital con placa inteligente y microchip para mayor respaldo.',
++    imageSrc: '/images/ramx-combo-identificacion.svg',
++    includes: ['Placa NFC/Qr', 'Microchip', 'Activación RAMX', 'Perfil público'],
++  },
++  {
++    type: 'combo_identidad_inteligente',
++    title: 'Combo Identidad Inteligente',
++    shortTitle: 'Combo Identidad',
++    price: 820,
++    priceLabel: '$820 MXN',
++    description:
++      'Paquete completo de identidad RAMX con placa, microchip, pasaporte y certificado.',
++    imageSrc: '/images/ramx-combo-identidad.svg',
++    includes: ['Placa NFC/Qr', 'Microchip', 'Pasaporte', 'Certificado'],
++  },
++]
++
++export const RAMX_STORE_PRODUCT_TYPES = RAMX_STORE_PRODUCTS.map(
++  (product) => product.type
++)
++
++export const RAMX_STORE_PRODUCT_BY_TYPE = Object.fromEntries(
++  RAMX_STORE_PRODUCTS.map((product) => [product.type, product])
++) as Record<RamxStoreProductType, RamxStoreProduct>
++
++export function getRamxStoreProduct(type: string | null) {
++  if (!type) return null
++
++  return RAMX_STORE_PRODUCTS.find((product) => product.type === type) || null
++}
++
++export function formatMxn(amount: number) {
++  return new Intl.NumberFormat('es-MX', {
++    style: 'currency',
++    currency: 'MXN',
++    maximumFractionDigits: 0,
++  }).format(amount)
++}
+diff -urN a/next-env.d.ts b/next-env.d.ts
+--- a/next-env.d.ts	1970-01-01 00:00:00.000000000 +0000
++++ b/next-env.d.ts	2026-07-03 08:56:12.402557904 +0000
+@@ -0,0 +1,6 @@
++/// <reference types="next" />
++/// <reference types="next/image-types/global" />
++import "./.next/types/routes.d.ts";
++
++// NOTE: This file should not be edited
++// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+diff -urN a/public/images/ramx-combo-identidad.svg b/public/images/ramx-combo-identidad.svg
+--- a/public/images/ramx-combo-identidad.svg	1970-01-01 00:00:00.000000000 +0000
++++ b/public/images/ramx-combo-identidad.svg	2026-07-03 08:53:39.260080552 +0000
+@@ -0,0 +1,52 @@
++<svg width="900" height="700" viewBox="0 0 900 700" fill="none" xmlns="http://www.w3.org/2000/svg">
++  <rect width="900" height="700" rx="72" fill="url(#bg)"/>
++  <circle cx="725" cy="128" r="120" fill="#FDBA74" fill-opacity="0.55"/>
++  <circle cx="175" cy="555" r="150" fill="#BAE6FD" fill-opacity="0.7"/>
++  <g filter="url(#shadowPassport)">
++    <rect x="440" y="122" width="285" height="390" rx="38" fill="#FFFFFF"/>
++    <rect x="470" y="162" width="225" height="58" rx="18" fill="#111827"/>
++    <text x="582" y="199" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800" fill="#FFFFFF">PASAPORTE</text>
++    <rect x="480" y="256" width="86" height="86" rx="22" fill="#FDBA74" fill-opacity="0.85"/>
++    <rect x="585" y="258" width="86" height="18" rx="9" fill="#CBD5E1"/>
++    <rect x="585" y="294" width="92" height="18" rx="9" fill="#CBD5E1"/>
++    <rect x="480" y="382" width="190" height="18" rx="9" fill="#E5E7EB"/>
++    <rect x="480" y="424" width="155" height="18" rx="9" fill="#E5E7EB"/>
++  </g>
++  <g filter="url(#shadowTag)">
++    <rect x="188" y="176" width="270" height="352" rx="72" fill="#111827"/>
++    <circle cx="323" cy="228" r="28" fill="#F8FAFC"/>
++    <rect x="238" y="304" width="170" height="170" rx="20" fill="#FFFFFF"/>
++    <rect x="260" y="326" width="40" height="40" rx="6" fill="#111827"/>
++    <rect x="346" y="326" width="40" height="40" rx="6" fill="#111827"/>
++    <rect x="260" y="412" width="40" height="40" rx="6" fill="#111827"/>
++    <rect x="314" y="330" width="18" height="18" rx="4" fill="#111827"/>
++    <rect x="314" y="382" width="38" height="22" rx="5" fill="#111827"/>
++    <rect x="364" y="392" width="22" height="60" rx="5" fill="#111827"/>
++    <rect x="314" y="430" width="36" height="22" rx="5" fill="#111827"/>
++  </g>
++  <g filter="url(#shadowCert)">
++    <rect x="332" y="480" width="330" height="116" rx="28" fill="#FFFFFF"/>
++    <circle cx="386" cy="538" r="27" fill="#FDBA74"/>
++    <path d="M374 540L384 550L401 527" stroke="#111827" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
++    <rect x="430" y="516" width="175" height="17" rx="8.5" fill="#111827"/>
++    <rect x="430" y="548" width="132" height="14" rx="7" fill="#CBD5E1"/>
++  </g>
++  <rect x="68" y="70" width="216" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.84"/>
++  <text x="176" y="106" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" fill="#111827">Identidad RAMX</text>
++  <defs>
++    <linearGradient id="bg" x1="0" y1="0" x2="900" y2="700" gradientUnits="userSpaceOnUse">
++      <stop stop-color="#FFF7ED"/>
++      <stop offset="0.52" stop-color="#EFF6FF"/>
++      <stop offset="1" stop-color="#F8FAFC"/>
++    </linearGradient>
++    <filter id="shadowPassport" x="385" y="82" width="395" height="500" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
++      <feDropShadow dx="0" dy="30" stdDeviation="28" flood-color="#0F172A" flood-opacity="0.17"/>
++    </filter>
++    <filter id="shadowTag" x="130" y="135" width="385" height="470" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
++      <feDropShadow dx="0" dy="34" stdDeviation="30" flood-color="#0F172A" flood-opacity="0.2"/>
++    </filter>
++    <filter id="shadowCert" x="285" y="448" width="425" height="210" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
++      <feDropShadow dx="0" dy="24" stdDeviation="26" flood-color="#0F172A" flood-opacity="0.14"/>
++    </filter>
++  </defs>
++</svg>
+diff -urN a/public/images/ramx-combo-identificacion.svg b/public/images/ramx-combo-identificacion.svg
+--- a/public/images/ramx-combo-identificacion.svg	1970-01-01 00:00:00.000000000 +0000
++++ b/public/images/ramx-combo-identificacion.svg	2026-07-03 08:53:39.254167086 +0000
+@@ -0,0 +1,40 @@
++<svg width="900" height="700" viewBox="0 0 900 700" fill="none" xmlns="http://www.w3.org/2000/svg">
++  <rect width="900" height="700" rx="72" fill="url(#bg)"/>
++  <circle cx="730" cy="155" r="132" fill="#FDBA74" fill-opacity="0.5"/>
++  <circle cx="190" cy="560" r="160" fill="#BFDBFE" fill-opacity="0.7"/>
++  <g filter="url(#shadow)">
++    <rect x="185" y="140" width="310" height="405" rx="78" fill="#111827"/>
++    <circle cx="340" cy="198" r="32" fill="#F8FAFC"/>
++    <rect x="236" y="270" width="208" height="208" rx="24" fill="#FFFFFF"/>
++    <rect x="262" y="296" width="48" height="48" rx="7" fill="#111827"/>
++    <rect x="370" y="296" width="48" height="48" rx="7" fill="#111827"/>
++    <rect x="262" y="404" width="48" height="48" rx="7" fill="#111827"/>
++    <rect x="324" y="298" width="22" height="22" rx="5" fill="#111827"/>
++    <rect x="326" y="356" width="40" height="24" rx="5" fill="#111827"/>
++    <rect x="386" y="370" width="32" height="82" rx="5" fill="#111827"/>
++    <rect x="324" y="424" width="42" height="28" rx="5" fill="#111827"/>
++    <path d="M280 240C312 222 368 222 400 240" stroke="#FDBA74" stroke-width="13" stroke-linecap="round"/>
++  </g>
++  <g filter="url(#shadow2)">
++    <rect x="510" y="228" width="230" height="244" rx="42" fill="#FFFFFF"/>
++    <rect x="542" y="267" width="166" height="32" rx="16" fill="#E5E7EB"/>
++    <rect x="552" y="328" width="146" height="72" rx="26" fill="#111827"/>
++    <path d="M580 350H670M580 378H670" stroke="#FDBA74" stroke-width="12" stroke-linecap="round"/>
++    <text x="625" y="438" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800" fill="#111827">MICROCHIP</text>
++  </g>
++  <rect x="68" y="70" width="250" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.84"/>
++  <text x="193" y="106" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="700" fill="#111827">Identificación RAMX</text>
++  <defs>
++    <linearGradient id="bg" x1="0" y1="0" x2="900" y2="700" gradientUnits="userSpaceOnUse">
++      <stop stop-color="#FFF7ED"/>
++      <stop offset="0.52" stop-color="#EFF6FF"/>
++      <stop offset="1" stop-color="#F8FAFC"/>
++    </linearGradient>
++    <filter id="shadow" x="120" y="90" width="440" height="535" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
++      <feDropShadow dx="0" dy="34" stdDeviation="30" flood-color="#0F172A" flood-opacity="0.2"/>
++    </filter>
++    <filter id="shadow2" x="450" y="190" width="350" height="360" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
++      <feDropShadow dx="0" dy="26" stdDeviation="28" flood-color="#0F172A" flood-opacity="0.16"/>
++    </filter>
++  </defs>
++</svg>
+diff -urN a/public/images/ramx-placa-inteligente.svg b/public/images/ramx-placa-inteligente.svg
+--- a/public/images/ramx-placa-inteligente.svg	1970-01-01 00:00:00.000000000 +0000
++++ b/public/images/ramx-placa-inteligente.svg	2026-07-03 08:53:39.246428877 +0000
+@@ -0,0 +1,33 @@
++<svg width="900" height="700" viewBox="0 0 900 700" fill="none" xmlns="http://www.w3.org/2000/svg">
++  <rect width="900" height="700" rx="72" fill="url(#bg)"/>
++  <circle cx="705" cy="135" r="120" fill="#FDBA74" fill-opacity="0.55"/>
++  <circle cx="190" cy="560" r="150" fill="#BAE6FD" fill-opacity="0.65"/>
++  <g filter="url(#shadow)">
++    <rect x="260" y="105" width="380" height="480" rx="92" fill="#111827"/>
++    <circle cx="450" cy="168" r="42" fill="#F8FAFC"/>
++    <rect x="318" y="250" width="264" height="264" rx="28" fill="#FFFFFF"/>
++    <rect x="348" y="280" width="62" height="62" rx="8" fill="#111827"/>
++    <rect x="490" y="280" width="62" height="62" rx="8" fill="#111827"/>
++    <rect x="348" y="422" width="62" height="62" rx="8" fill="#111827"/>
++    <rect x="438" y="282" width="24" height="24" rx="5" fill="#111827"/>
++    <rect x="438" y="330" width="48" height="24" rx="5" fill="#111827"/>
++    <rect x="418" y="382" width="34" height="34" rx="5" fill="#111827"/>
++    <rect x="478" y="382" width="74" height="24" rx="5" fill="#111827"/>
++    <rect x="438" y="446" width="24" height="38" rx="5" fill="#111827"/>
++    <rect x="488" y="438" width="64" height="46" rx="5" fill="#111827"/>
++    <path d="M382 212C420 192 478 192 516 212" stroke="#FDBA74" stroke-width="18" stroke-linecap="round"/>
++    <path d="M354 214C414 166 486 166 546 214" stroke="#FDBA74" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
++  </g>
++  <rect x="70" y="70" width="182" height="58" rx="29" fill="#FFFFFF" fill-opacity="0.82"/>
++  <text x="161" y="106" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#111827">RAMX Tag</text>
++  <defs>
++    <linearGradient id="bg" x1="0" y1="0" x2="900" y2="700" gradientUnits="userSpaceOnUse">
++      <stop stop-color="#FFF7ED"/>
++      <stop offset="0.52" stop-color="#EFF6FF"/>
++      <stop offset="1" stop-color="#F8FAFC"/>
++    </linearGradient>
++    <filter id="shadow" x="190" y="60" width="520" height="620" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
++      <feDropShadow dx="0" dy="36" stdDeviation="34" flood-color="#0F172A" flood-opacity="0.22"/>
++    </filter>
++  </defs>
++</svg>
+diff -urN a/supabase/migrations/20260703093000_ramx_orders_guest_checkout.sql b/supabase/migrations/20260703093000_ramx_orders_guest_checkout.sql
+--- a/supabase/migrations/20260703093000_ramx_orders_guest_checkout.sql	1970-01-01 00:00:00.000000000 +0000
++++ b/supabase/migrations/20260703093000_ramx_orders_guest_checkout.sql	2026-07-03 08:55:28.398795932 +0000
+@@ -0,0 +1,8 @@
++-- RAMX tienda: permite solicitudes de compradores nuevos sin cuenta ni mascota vinculada.
++-- Ejecutar solo si tu tabla actual tiene profile_id o pet_id como NOT NULL.
++
++alter table if exists public.ramx_orders
++  alter column profile_id drop not null;
++
++alter table if exists public.ramx_orders
++  alter column pet_id drop not null;

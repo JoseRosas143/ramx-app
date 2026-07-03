@@ -120,7 +120,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
               Órdenes RAMX
             </h1>
             <p className="mt-1 text-sm leading-6 text-neutral-600">
-              Solicitudes internas de placa QR/NFC, microchip y Kit RAMX.
+              Solicitudes de Placa Inteligente NFC/Qr y combos de identidad RAMX.
             </p>
           </div>
 
@@ -239,7 +239,7 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-4 lg:grid-cols-3">
+              <div className="mt-5 grid gap-4 lg:grid-cols-4">
                 <InfoBox
                   label="Producto"
                   value={(order.ramx_order_items || [])
@@ -255,8 +255,12 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                 <InfoBox
                   label="Entrega"
                   value={`${deliveryLabel(order.shipping_method)}${
-                    order.shipping_address ? ` · ${order.shipping_address}` : ''
+                    order.shipping_address ? `\n${order.shipping_address}` : ''
                   }`}
+                />
+                <InfoBox
+                  label="Total"
+                  value={formatMxn(Number(order.total_amount || 0), order.currency)}
                 />
               </div>
 
@@ -364,7 +368,7 @@ function InfoBox({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
         {label}
       </p>
-      <p className="mt-1 text-sm leading-6 text-neutral-800">{value || '—'}</p>
+      <p className="mt-1 whitespace-pre-line text-sm leading-6 text-neutral-800">{value || '—'}</p>
     </div>
   )
 }
@@ -386,6 +390,14 @@ function StatusPill({
       {label}
     </span>
   )
+}
+
+function formatMxn(amount: number, currency = 'MXN') {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: currency || 'MXN',
+    maximumFractionDigits: 0,
+  }).format(amount)
 }
 
 function deliveryLabel(value: string) {
