@@ -48,10 +48,12 @@ export default async function ActivatePhysicalCodePage({
       status,
       assigned_pet_id,
       assigned_profile_id,
+      deleted_at,
       activated_at
     `
     )
     .eq('code', normalizedCode)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (physicalCode?.status === 'activated' && physicalCode.assigned_pet_id) {
@@ -183,8 +185,7 @@ export default async function ActivatePhysicalCodePage({
                     <option value="">Elegir mascota</option>
                     {petOptions.map((pet) => (
                       <option key={pet.id} value={pet.id}>
-                        {pet.name} ·{' '}
-                        {pet.microchip_number || pet.internal_id || 'RAMX'}
+                        {pet.name} · {pet.microchip_number || pet.internal_id || 'RAMX'}
                       </option>
                     ))}
                   </select>

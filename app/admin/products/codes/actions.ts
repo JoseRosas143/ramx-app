@@ -40,6 +40,7 @@ export async function generatePhysicalCodesAction(formData: FormData) {
     batch_name: batchName,
     notes,
     status: 'available',
+    is_printed: false,
     created_by_profile_id: user.id,
   }))
 
@@ -65,6 +66,20 @@ export async function updatePhysicalCodeStatusAction(formData: FormData) {
 
   const nextStatus = nextStatusRaw as Status
 
+  const { data: currentCode, error: lookupError } = await admin
+    .from('ramx_physical_codes')
+    .select('id, status, deleted_at')
+    .eq('id', codeId)
+    .maybeSingle()
+
+  if (lookupError || !currentCode || currentCode.deleted_at) {
+    throw new Error('No se encontró el código que quieres actualizar.')
+  }
+
+  if (currentCode.status === 'activated' && nextStatus !== 'activated') {
+    throw new Error('Un código activado no debe cambiarse desde esta pantalla.')
+  }
+
   const payload: Record<string, unknown> = {
     status: nextStatus,
   }
@@ -84,6 +99,82 @@ export async function updatePhysicalCodeStatusAction(formData: FormData) {
 
   if (error) {
     throw new Error(`No se pudo actualizar el código: ${error.message}`)
+  }
+
+  revalidatePath('/admin/products/codes')
+}
+
+export async function updatePhysicalCodesPrintedAction(formData: FormData) {
+  await requireRamxAdmin()
+  const admin = createAdminClient()
+
+  const ids = getIds(formData)
+  const isPrinted = String(formData.get('is_printed') || '') === 'true'
+
+  if (ids.length === 0) {
+    throw new Error('Selecciona al menos un código.')
+  }
+
+  const { error } = await admin
+    .from('ramx_physical_codes')
+    .update({
+      is_printed: isPrinted,
+      printed_at: isPrinted ? new Date().toISOString() : null,
+    })
+    .in('id', ids)
+    .is('deleted_at', null)
+
+  if (error) {
+    throw new Error(`No se pudo actualizar impresión: ${error.message}`)
+  }
+
+  revalidatePath('/admin/products/codes')
+}
+
+export async function deletePhysicalCodesAction(formData: FormData) {
+  const { user } = await requireRamxAdmin()
+  const admin = createAdminClient()
+
+  const ids = getIds(formData)
+
+  if (ids.length === 0) {
+    throw new Error('Selecciona al menos un código para eliminar.')
+  }
+
+  const { data: selectedCodes, error: lookupError } = await admin
+    .from('ramx_physical_codes')
+    .select('id, code, status, deleted_at')
+    .in('id', ids)
+
+  if (lookupError) {
+    throw new Error(`No se pudieron revisar los códigos: ${lookupError.message}`)
+  }
+
+  const activeCodes = (selectedCodes || []).filter(
+    (item) => item.status === 'activated'
+  )
+
+  if (activeCodes.length > 0) {
+    throw new Error(
+      `No puedes eliminar códigos activados. Desactiva o revisa: ${activeCodes
+        .map((item) => item.code)
+        .join(', ')}`
+    )
+  }
+
+  const { error } = await admin
+    .from('ramx_physical_codes')
+    .update({
+      status: 'disabled',
+      disabled_at: new Date().toISOString(),
+      deleted_at: new Date().toISOString(),
+      deleted_by_profile_id: user.id,
+    })
+    .in('id', ids)
+    .neq('status', 'activated')
+
+  if (error) {
+    throw new Error(`No se pudieron eliminar los códigos: ${error.message}`)
   }
 
   revalidatePath('/admin/products/codes')
@@ -121,6 +212,13 @@ function normalizePrefix(value: string) {
     .slice(0, 8)
 
   return normalized || 'RAMX'
+}
+
+function getIds(formData: FormData) {
+  return formData
+    .getAll('code_ids')
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
 }
 
 function clean(value: FormDataEntryValue | null) {

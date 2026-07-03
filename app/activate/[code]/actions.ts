@@ -27,8 +27,9 @@ export async function activatePhysicalCodeAction(formData: FormData) {
 
   const { data: physicalCode, error: codeError } = await admin
     .from('ramx_physical_codes')
-    .select('id, code, status, assigned_pet_id, assigned_profile_id')
+    .select('id, code, status, assigned_pet_id, assigned_profile_id, deleted_at')
     .eq('code', code)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (codeError || !physicalCode) {

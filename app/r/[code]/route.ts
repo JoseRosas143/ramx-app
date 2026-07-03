@@ -10,9 +10,15 @@ type RouteContext = {
 export async function GET(request: NextRequest, { params }: RouteContext) {
   const { code } = await params
   const normalizedCode = normalizeCode(code)
-  const admin = createAdminClient()
+  const supabase = createAdminClient()
 
-  const { data: physicalCode, error } = await admin
+  if (!normalizedCode) {
+    return NextResponse.redirect(
+      new URL('/activate/invalid?status=invalid', request.url)
+    )
+  }
+
+  const { data: physicalCode, error } = await supabase
     .from('ramx_physical_codes')
     .select(
       `
@@ -20,49 +26,65 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       code,
       status,
       assigned_pet_id,
-      assigned_profile_id
+      deleted_at
     `
     )
     .eq('code', normalizedCode)
     .maybeSingle()
 
-  if (error || !physicalCode) {
+  if (error || !physicalCode || physicalCode.deleted_at) {
     return NextResponse.redirect(
-      new URL(`/activate/${encodeURIComponent(normalizedCode)}?status=invalid`, request.url)
+      new URL(
+        `/activate/${encodeURIComponent(normalizedCode)}?status=invalid`,
+        request.url
+      )
     )
   }
-
-  await admin.from('ramx_product_scan_events').insert({
-    code_id: physicalCode.id,
-    code: physicalCode.code,
-    pet_id: physicalCode.assigned_pet_id,
-    profile_id: physicalCode.assigned_profile_id,
-    source: 'redirect',
-    user_agent: request.headers.get('user-agent'),
-    referrer: request.headers.get('referer'),
-  })
 
   if (physicalCode.status === 'disabled') {
     return NextResponse.redirect(
-      new URL(`/activate/${encodeURIComponent(normalizedCode)}?status=disabled`, request.url)
+      new URL(
+        `/activate/${encodeURIComponent(normalizedCode)}?status=disabled`,
+        request.url
+      )
     )
   }
 
-  if (physicalCode.status === 'activated' && physicalCode.assigned_pet_id) {
-    const { data: pet } = await admin
-      .from('pets')
-      .select('id, public_slug')
-      .eq('id', physicalCode.assigned_pet_id)
-      .maybeSingle()
+  if (physicalCode.status !== 'activated' || !physicalCode.assigned_pet_id) {
+    await supabase.from('ramx_product_scan_events').insert({
+      code_id: physicalCode.id,
+      code: physicalCode.code,
+      source: 'redirect_unactivated',
+    })
 
-    if (pet?.public_slug) {
-      return NextResponse.redirect(new URL(`/p/${pet.public_slug}`, request.url))
-    }
+    return NextResponse.redirect(
+      new URL(`/activate/${encodeURIComponent(normalizedCode)}`, request.url)
+    )
   }
 
-  return NextResponse.redirect(
-    new URL(`/activate/${encodeURIComponent(normalizedCode)}`, request.url)
-  )
+  const { data: pet } = await supabase
+    .from('pets')
+    .select('id, public_slug')
+    .eq('id', physicalCode.assigned_pet_id)
+    .maybeSingle()
+
+  if (!pet?.public_slug) {
+    return NextResponse.redirect(
+      new URL(
+        `/activate/${encodeURIComponent(normalizedCode)}?status=pet_not_found`,
+        request.url
+      )
+    )
+  }
+
+  await supabase.from('ramx_product_scan_events').insert({
+    code_id: physicalCode.id,
+    code: physicalCode.code,
+    pet_id: pet.id,
+    source: 'redirect_public_profile',
+  })
+
+  return NextResponse.redirect(new URL(`/p/${pet.public_slug}`, request.url))
 }
 
 function normalizeCode(value: string) {

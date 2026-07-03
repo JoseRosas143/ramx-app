@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { toPng } from 'html-to-image'
 
 type Props = {
   petName: string
@@ -40,7 +39,7 @@ export default function PublicProfileQrCard({
     if (!profileUrl) return
 
     QRCode.toDataURL(profileUrl, {
-      width: 900,
+      width: 1200,
       margin: 1,
       errorCorrectionLevel: 'H',
       color: {
@@ -75,38 +74,49 @@ export default function PublicProfileQrCard({
   }
 
   const handleDownloadCard = async () => {
-    if (!cardRef.current) return
+    if (!qrDataUrl || !profileUrl) return
 
     setWorking(true)
 
     try {
-      const dataUrl = await toPng(cardRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff',
+      const dataUrl = await buildQrCardPng({
+        petName,
+        identifier: displayIdentifier,
+        profileUrl,
+        qrDataUrl,
       })
 
+      const fileName = `RAMX-${sanitizeFileName(petName)}-QR.png`
+
       const link = document.createElement('a')
-      link.download = `RAMX-${sanitizeFileName(petName)}-QR.png`
       link.href = dataUrl
+      link.download = fileName
+      link.rel = 'noopener'
+      document.body.appendChild(link)
       link.click()
+      document.body.removeChild(link)
     } catch (error) {
       console.error('Download QR card error:', error)
+
+      if (qrDataUrl) {
+        window.open(qrDataUrl, '_blank', 'noopener,noreferrer')
+      }
     } finally {
       setWorking(false)
     }
   }
 
   const handlePrintCard = async () => {
-    if (!cardRef.current) return
+    if (!qrDataUrl || !profileUrl) return
 
     setWorking(true)
 
     try {
-      const dataUrl = await toPng(cardRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: '#ffffff',
+      const dataUrl = await buildQrCardPng({
+        petName,
+        identifier: displayIdentifier,
+        profileUrl,
+        qrDataUrl,
       })
 
       const printWindow = window.open('', '_blank', 'width=900,height=900')
@@ -271,10 +281,209 @@ export default function PublicProfileQrCard({
               {copied ? 'Copiado' : 'Copiar link'}
             </button>
           </div>
+
+          <p className="text-xs leading-5 text-neutral-500">
+            En iPhone, si Safari no descarga directamente, abrirá la imagen para
+            que puedas guardarla en Fotos o Archivos.
+          </p>
         </div>
       </div>
     </section>
   )
+}
+
+async function buildQrCardPng({
+  petName,
+  identifier,
+  profileUrl,
+  qrDataUrl,
+}: {
+  petName: string
+  identifier: string
+  profileUrl: string
+  qrDataUrl: string
+}) {
+  const canvas = document.createElement('canvas')
+  const width = 1080
+  const height = 1680
+  const scale = window.devicePixelRatio > 1 ? 2 : 1
+
+  canvas.width = width * scale
+  canvas.height = height * scale
+
+  const ctx = canvas.getContext('2d')
+
+  if (!ctx) {
+    throw new Error('No se pudo preparar la imagen del QR.')
+  }
+
+  ctx.scale(scale, scale)
+
+  const qrImage = await loadImage(qrDataUrl)
+
+  drawRoundedRect(ctx, 0, 0, width, height, 72, '#ffffff')
+  drawRoundedRect(ctx, 0, 0, width, 250, 72, '#050505')
+
+  ctx.fillStyle = '#9ca3af'
+  ctx.font = '700 42px Georgia, serif'
+  ctx.letterSpacing = '12px'
+  ctx.fillText('RAMX', 90, 95)
+
+  ctx.fillStyle = '#ffffff'
+  ctx.font = '700 58px Georgia, serif'
+  wrapCanvasText(ctx, 'Perfil público de mascota', 90, 175, 900, 68)
+
+  ctx.fillStyle = '#050505'
+  ctx.textAlign = 'center'
+  ctx.font = '700 58px Georgia, serif'
+  ctx.fillText(petName || 'Mascota RAMX', width / 2, 390)
+
+  ctx.fillStyle = '#7a7a7a'
+  ctx.font = '400 42px Georgia, serif'
+  ctx.fillText(identifier || 'RAMX', width / 2, 455)
+
+  ctx.textAlign = 'left'
+
+  const qrBoxX = 105
+  const qrBoxY = 590
+  const qrBoxSize = 870
+
+  drawRoundedStroke(ctx, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, 64, '#e5e7eb', 4)
+
+  const qrPadding = 60
+  ctx.drawImage(
+    qrImage,
+    qrBoxX + qrPadding,
+    qrBoxY + qrPadding,
+    qrBoxSize - qrPadding * 2,
+    qrBoxSize - qrPadding * 2
+  )
+
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '400 42px Georgia, serif'
+  ctx.textAlign = 'center'
+  wrapCanvasText(ctx, profileUrl, width / 2, 1515, 900, 52, 'center')
+
+  ctx.fillStyle = '#111827'
+  ctx.font = '600 46px Georgia, serif'
+  wrapCanvasText(
+    ctx,
+    'Escanea para ver el perfil público en RAMX.',
+    width / 2,
+    1615,
+    820,
+    56,
+    'center'
+  )
+
+  return canvas.toDataURL('image/png')
+}
+
+function loadImage(src: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = reject
+    image.src = src
+  })
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  fill: string
+) {
+  ctx.save()
+  roundedPath(ctx, x, y, width, height, radius)
+  ctx.fillStyle = fill
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawRoundedStroke(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  stroke: string,
+  lineWidth: number
+) {
+  ctx.save()
+  roundedPath(ctx, x, y, width, height, radius)
+  ctx.strokeStyle = stroke
+  ctx.lineWidth = lineWidth
+  ctx.stroke()
+  ctx.restore()
+}
+
+function roundedPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  const safeRadius = Math.min(radius, width / 2, height / 2)
+
+  ctx.beginPath()
+  ctx.moveTo(x + safeRadius, y)
+  ctx.lineTo(x + width - safeRadius, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius)
+  ctx.lineTo(x + width, y + height - safeRadius)
+  ctx.quadraticCurveTo(
+    x + width,
+    y + height,
+    x + width - safeRadius,
+    y + height
+  )
+  ctx.lineTo(x + safeRadius, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius)
+  ctx.lineTo(x, y + safeRadius)
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y)
+  ctx.closePath()
+}
+
+function wrapCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  align: CanvasTextAlign = 'left'
+) {
+  const previousAlign = ctx.textAlign
+  ctx.textAlign = align
+
+  const words = String(text || '').split(' ')
+  let line = ''
+  let currentY = y
+
+  for (let index = 0; index < words.length; index += 1) {
+    const testLine = line ? `${line} ${words[index]}` : words[index]
+    const metrics = ctx.measureText(testLine)
+
+    if (metrics.width > maxWidth && line) {
+      ctx.fillText(line, x, currentY)
+      line = words[index]
+      currentY += lineHeight
+    } else {
+      line = testLine
+    }
+  }
+
+  if (line) {
+    ctx.fillText(line, x, currentY)
+  }
+
+  ctx.textAlign = previousAlign
 }
 
 function sanitizeFileName(value: string) {

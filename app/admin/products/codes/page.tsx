@@ -1,10 +1,16 @@
 import Link from 'next/link'
 import { requireRamxAdmin } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase/admin'
-import {
-  generatePhysicalCodesAction,
-  updatePhysicalCodeStatusAction,
-} from './actions'
+import { generatePhysicalCodesAction } from './actions'
+import CodesTableClient from './codes-table-client'
+
+type PageProps = {
+  searchParams?: Promise<{
+    status?: string
+    printed?: string
+    q?: string
+  }>
+}
 
 type PhysicalCode = {
   id: string
@@ -17,6 +23,8 @@ type PhysicalCode = {
   activated_at: string | null
   created_at: string
   notes: string | null
+  is_printed: boolean | null
+  printed_at: string | null
 }
 
 type PetInfo = {
@@ -25,13 +33,23 @@ type PetInfo = {
   public_slug: string | null
 }
 
-export default async function AdminPhysicalCodesPage() {
+const STATUS_FILTERS = ['all', 'available', 'reserved', 'activated', 'disabled']
+const PRINTED_FILTERS = ['all', 'printed', 'not_printed']
+
+export default async function AdminPhysicalCodesPage({
+  searchParams,
+}: PageProps) {
   await requireRamxAdmin()
+
+  const params = searchParams ? await searchParams : {}
+  const statusFilter = normalizeStatusFilter(params.status)
+  const printedFilter = normalizePrintedFilter(params.printed)
+  const search = String(params.q || '').trim().slice(0, 80)
 
   const admin = createAdminClient()
   const baseUrl = getBaseUrl()
 
-  const { data: codes, error } = await admin
+  let codesQuery = admin
     .from('ramx_physical_codes')
     .select(
       `
@@ -44,11 +62,38 @@ export default async function AdminPhysicalCodesPage() {
       assigned_profile_id,
       activated_at,
       created_at,
-      notes
+      notes,
+      is_printed,
+      printed_at
     `
     )
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
-    .limit(80)
+    .limit(300)
+
+  if (statusFilter !== 'all') {
+    codesQuery = codesQuery.eq('status', statusFilter)
+  }
+
+  if (printedFilter === 'printed') {
+    codesQuery = codesQuery.eq('is_printed', true)
+  }
+
+  if (printedFilter === 'not_printed') {
+    codesQuery = codesQuery.eq('is_printed', false)
+  }
+
+  if (search) {
+    codesQuery = codesQuery.ilike('code', `%${escapeIlike(search)}%`)
+  }
+
+  const [{ data: codes, error }, { data: statsRows }] = await Promise.all([
+    codesQuery,
+    admin
+      .from('ramx_physical_codes')
+      .select('status, is_printed')
+      .is('deleted_at', null),
+  ])
 
   const physicalCodes = (codes || []) as PhysicalCode[]
   const petIds = Array.from(
@@ -61,10 +106,7 @@ export default async function AdminPhysicalCodesPage() {
 
   const { data: pets } =
     petIds.length > 0
-      ? await admin
-          .from('pets')
-          .select('id, name, public_slug')
-          .in('id', petIds)
+      ? await admin.from('pets').select('id, name, public_slug').in('id', petIds)
       : { data: [] as PetInfo[] }
 
   const petsById = new Map<string, PetInfo>()
@@ -73,19 +115,32 @@ export default async function AdminPhysicalCodesPage() {
     petsById.set(pet.id, pet)
   }
 
-  const availableCount = physicalCodes.filter(
+  const allStats = (statsRows || []) as Array<{
+    status: string
+    is_printed: boolean | null
+  }>
+
+  const availableCount = allStats.filter(
     (item) => item.status === 'available'
   ).length
-  const activatedCount = physicalCodes.filter(
+  const activatedCount = allStats.filter(
     (item) => item.status === 'activated'
   ).length
-  const disabledCount = physicalCodes.filter(
+  const disabledCount = allStats.filter(
     (item) => item.status === 'disabled'
   ).length
+  const printedCount = allStats.filter((item) => item.is_printed).length
+
+  const rows = physicalCodes.map((item) => ({
+    ...item,
+    is_printed: Boolean(item.is_printed),
+    redirect_url: `${baseUrl}/r/${item.code}`,
+    pet: item.assigned_pet_id ? petsById.get(item.assigned_pet_id) || null : null,
+  }))
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link
             href="/admin"
@@ -118,10 +173,11 @@ export default async function AdminPhysicalCodesPage() {
             mascota.
           </p>
 
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <div className="mt-6 grid gap-3 sm:grid-cols-4">
             <Stat label="Disponibles" value={availableCount} />
             <Stat label="Activados" value={activatedCount} />
             <Stat label="Desactivados" value={disabledCount} />
+            <Stat label="Impresos" value={printedCount} />
           </div>
         </section>
 
@@ -130,7 +186,10 @@ export default async function AdminPhysicalCodesPage() {
             Crear lote de códigos
           </h2>
 
-          <form action={generatePhysicalCodesAction} className="mt-5 grid gap-4 lg:grid-cols-6">
+          <form
+            action={generatePhysicalCodesAction}
+            className="mt-5 grid gap-4 lg:grid-cols-6"
+          >
             <label className="space-y-2 lg:col-span-2">
               <span className="text-sm font-medium text-neutral-700">Tipo</span>
               <select
@@ -200,11 +259,11 @@ export default async function AdminPhysicalCodesPage() {
           <div className="flex flex-wrap items-end justify-between gap-3 px-1 pb-4">
             <div>
               <h2 className="text-xl font-semibold tracking-tight text-neutral-950">
-                Últimos códigos
+                Códigos
               </h2>
               <p className="mt-1 text-sm text-neutral-600">
-                Copia la URL <strong>/r/[código]</strong> para generar el QR o
-                grabar el NFC.
+                Filtra, marca como impreso, elimina códigos sin activar y exporta
+                las URLs <strong>/r/[código]</strong> para impresión.
               </p>
             </div>
 
@@ -215,113 +274,69 @@ export default async function AdminPhysicalCodesPage() {
             ) : null}
           </div>
 
-          <div className="overflow-x-auto rounded-[24px] border border-neutral-200 bg-white">
-            <table className="min-w-[980px] w-full text-left text-sm">
-              <thead className="bg-neutral-50 text-xs uppercase tracking-wide text-neutral-500">
-                <tr>
-                  <th className="px-4 py-3">Código</th>
-                  <th className="px-4 py-3">URL QR/NFC</th>
-                  <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3">Mascota</th>
-                  <th className="px-4 py-3">Lote</th>
-                  <th className="px-4 py-3">Acción</th>
-                </tr>
-              </thead>
+          <form method="get" className="mb-4 grid gap-3 rounded-[24px] border border-neutral-200 bg-white p-4 md:grid-cols-4">
+            <label className="space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Estado
+              </span>
+              <select
+                name="status"
+                defaultValue={statusFilter}
+                className="h-11 w-full rounded-2xl border border-neutral-300 bg-white px-3 text-sm outline-none"
+              >
+                <option value="all">Todos</option>
+                <option value="available">Disponibles</option>
+                <option value="reserved">Reservados</option>
+                <option value="activated">Activados</option>
+                <option value="disabled">Desactivados</option>
+              </select>
+            </label>
 
-              <tbody className="divide-y divide-neutral-100">
-                {physicalCodes.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-neutral-500">
-                      Aún no hay códigos físicos.
-                    </td>
-                  </tr>
-                ) : (
-                  physicalCodes.map((item) => {
-                    const pet = item.assigned_pet_id
-                      ? petsById.get(item.assigned_pet_id)
-                      : null
-                    const redirectUrl = `${baseUrl}/r/${item.code}`
+            <label className="space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Impresión
+              </span>
+              <select
+                name="printed"
+                defaultValue={printedFilter}
+                className="h-11 w-full rounded-2xl border border-neutral-300 bg-white px-3 text-sm outline-none"
+              >
+                <option value="all">Todos</option>
+                <option value="printed">Impresos</option>
+                <option value="not_printed">No impresos</option>
+              </select>
+            </label>
 
-                    return (
-                      <tr key={item.id} className="align-top">
-                        <td className="px-4 py-4">
-                          <p className="font-semibold text-neutral-950">{item.code}</p>
-                          <p className="mt-1 text-xs text-neutral-500">
-                            {formatDate(item.created_at)}
-                          </p>
-                        </td>
+            <label className="space-y-2 md:col-span-1">
+              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Buscar código
+              </span>
+              <input
+                name="q"
+                defaultValue={search}
+                placeholder="RAMX-QR..."
+                className="h-11 w-full rounded-2xl border border-neutral-300 bg-white px-3 text-sm outline-none"
+              />
+            </label>
 
-                        <td className="px-4 py-4">
-                          <p className="max-w-[290px] break-all rounded-2xl bg-neutral-50 px-3 py-2 text-xs text-neutral-700">
-                            {redirectUrl}
-                          </p>
-                        </td>
+            <div className="flex items-end gap-2">
+              <button
+                type="submit"
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-2xl bg-neutral-950 px-4 text-sm font-semibold text-white"
+              >
+                Filtrar
+              </button>
 
-                        <td className="px-4 py-4 text-neutral-700">
-                          {getProductLabel(item.product_type)}
-                        </td>
+              <Link
+                href="/admin/products/codes"
+                className="inline-flex h-11 items-center justify-center rounded-2xl border border-neutral-300 bg-white px-4 text-sm font-semibold text-neutral-700"
+              >
+                Limpiar
+              </Link>
+            </div>
+          </form>
 
-                        <td className="px-4 py-4">
-                          <StatusBadge status={item.status} />
-                        </td>
-
-                        <td className="px-4 py-4">
-                          {pet ? (
-                            <div>
-                              <p className="font-medium text-neutral-900">{pet.name}</p>
-                              {pet.public_slug ? (
-                                <Link
-                                  href={`/p/${pet.public_slug}`}
-                                  className="mt-1 inline-flex text-xs font-medium text-sky-700 underline underline-offset-4"
-                                >
-                                  Ver perfil
-                                </Link>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <span className="text-neutral-500">Sin asignar</span>
-                          )}
-                        </td>
-
-                        <td className="px-4 py-4 text-neutral-700">
-                          {item.batch_name || 'Sin lote'}
-                        </td>
-
-                        <td className="px-4 py-4">
-                          {item.status !== 'activated' ? (
-                            <form action={updatePhysicalCodeStatusAction} className="flex gap-2">
-                              <input type="hidden" name="code_id" value={item.id} />
-                              <select
-                                name="next_status"
-                                defaultValue={item.status}
-                                className="h-10 rounded-xl border border-neutral-300 bg-white px-3 text-xs outline-none"
-                              >
-                                <option value="available">Disponible</option>
-                                <option value="reserved">Reservado</option>
-                                <option value="disabled">Desactivado</option>
-                              </select>
-
-                              <button
-                                type="submit"
-                                className="h-10 rounded-xl bg-neutral-950 px-3 text-xs font-semibold text-white"
-                              >
-                                Guardar
-                              </button>
-                            </form>
-                          ) : (
-                            <span className="text-xs text-neutral-500">
-                              Activado {item.activated_at ? formatDate(item.activated_at) : ''}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+          <CodesTableClient codes={rows} />
         </section>
       </div>
     </main>
@@ -331,59 +346,24 @@ export default async function AdminPhysicalCodesPage() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white/80 p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">{label}</p>
+      <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">
+        {label}
+      </p>
       <p className="mt-2 text-2xl font-semibold text-neutral-950">{value}</p>
     </div>
   )
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    available: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    reserved: 'bg-amber-50 text-amber-700 border-amber-200',
-    activated: 'bg-sky-50 text-sky-700 border-sky-200',
-    disabled: 'bg-neutral-100 text-neutral-600 border-neutral-200',
-  }
-
-  return (
-    <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
-        styles[status] || styles.disabled
-      }`}
-    >
-      {getStatusLabel(status)}
-    </span>
-  )
+function normalizeStatusFilter(value?: string) {
+  return STATUS_FILTERS.includes(value || '') ? value || 'all' : 'all'
 }
 
-function getStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    available: 'Disponible',
-    reserved: 'Reservado',
-    activated: 'Activado',
-    disabled: 'Desactivado',
-  }
-
-  return labels[status] || status
+function normalizePrintedFilter(value?: string) {
+  return PRINTED_FILTERS.includes(value || '') ? value || 'all' : 'all'
 }
 
-function getProductLabel(productType: string) {
-  const labels: Record<string, string> = {
-    qr_plate: 'Placa QR',
-    qr_nfc_plate: 'Placa QR + NFC',
-    nfc_card: 'Tarjeta NFC',
-    kit: 'Kit RAMX',
-    other: 'Otro',
-  }
-
-  return labels[productType] || productType
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat('es-MX', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
+function escapeIlike(value: string) {
+  return value.replace(/[%_]/g, '')
 }
 
 function getBaseUrl() {
