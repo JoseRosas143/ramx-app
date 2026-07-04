@@ -36,6 +36,41 @@ type Props = {
 
 type PickerMode = 'state' | 'municipality'
 
+const MEXICO_STATE_FALLBACK: StateOption[] = [
+  { code: '01', fullCode: '01', name: 'Aguascalientes', abbreviation: 'Ags.' },
+  { code: '02', fullCode: '02', name: 'Baja California', abbreviation: 'BC' },
+  { code: '03', fullCode: '03', name: 'Baja California Sur', abbreviation: 'BCS' },
+  { code: '04', fullCode: '04', name: 'Campeche', abbreviation: 'Camp.' },
+  { code: '05', fullCode: '05', name: 'Coahuila de Zaragoza', abbreviation: 'Coah.' },
+  { code: '06', fullCode: '06', name: 'Colima', abbreviation: 'Col.' },
+  { code: '07', fullCode: '07', name: 'Chiapas', abbreviation: 'Chis.' },
+  { code: '08', fullCode: '08', name: 'Chihuahua', abbreviation: 'Chih.' },
+  { code: '09', fullCode: '09', name: 'Ciudad de México', abbreviation: 'CDMX' },
+  { code: '10', fullCode: '10', name: 'Durango', abbreviation: 'Dgo.' },
+  { code: '11', fullCode: '11', name: 'Guanajuato', abbreviation: 'Gto.' },
+  { code: '12', fullCode: '12', name: 'Guerrero', abbreviation: 'Gro.' },
+  { code: '13', fullCode: '13', name: 'Hidalgo', abbreviation: 'Hgo.' },
+  { code: '14', fullCode: '14', name: 'Jalisco', abbreviation: 'Jal.' },
+  { code: '15', fullCode: '15', name: 'México', abbreviation: 'Méx.' },
+  { code: '16', fullCode: '16', name: 'Michoacán de Ocampo', abbreviation: 'Mich.' },
+  { code: '17', fullCode: '17', name: 'Morelos', abbreviation: 'Mor.' },
+  { code: '18', fullCode: '18', name: 'Nayarit', abbreviation: 'Nay.' },
+  { code: '19', fullCode: '19', name: 'Nuevo León', abbreviation: 'NL' },
+  { code: '20', fullCode: '20', name: 'Oaxaca', abbreviation: 'Oax.' },
+  { code: '21', fullCode: '21', name: 'Puebla', abbreviation: 'Pue.' },
+  { code: '22', fullCode: '22', name: 'Querétaro', abbreviation: 'Qro.' },
+  { code: '23', fullCode: '23', name: 'Quintana Roo', abbreviation: 'Q. Roo' },
+  { code: '24', fullCode: '24', name: 'San Luis Potosí', abbreviation: 'SLP' },
+  { code: '25', fullCode: '25', name: 'Sinaloa', abbreviation: 'Sin.' },
+  { code: '26', fullCode: '26', name: 'Sonora', abbreviation: 'Son.' },
+  { code: '27', fullCode: '27', name: 'Tabasco', abbreviation: 'Tab.' },
+  { code: '28', fullCode: '28', name: 'Tamaulipas', abbreviation: 'Tamps.' },
+  { code: '29', fullCode: '29', name: 'Tlaxcala', abbreviation: 'Tlax.' },
+  { code: '30', fullCode: '30', name: 'Veracruz de Ignacio de la Llave', abbreviation: 'Ver.' },
+  { code: '31', fullCode: '31', name: 'Yucatán', abbreviation: 'Yuc.' },
+  { code: '32', fullCode: '32', name: 'Zacatecas', abbreviation: 'Zac.' },
+]
+
 export default function MexicoLocationSelect({
   labelPrefix,
   required = false,
@@ -45,9 +80,9 @@ export default function MexicoLocationSelect({
   municipalityName,
   onChange,
 }: Props) {
-  const [states, setStates] = useState<StateOption[]>([])
+  const [states, setStates] = useState<StateOption[]>(MEXICO_STATE_FALLBACK)
   const [municipalities, setMunicipalities] = useState<MunicipalityOption[]>([])
-  const [loadingStates, setLoadingStates] = useState(true)
+  const [loadingStates, setLoadingStates] = useState(false)
   const [loadingMunicipalities, setLoadingMunicipalities] = useState(false)
   const [error, setError] = useState('')
   const [pickerMode, setPickerMode] = useState<PickerMode | null>(null)
@@ -93,21 +128,27 @@ export default function MexicoLocationSelect({
       setError('')
 
       try {
-        const response = await fetch('/api/geo/mexico')
+        const response = await fetch('/api/geo/mexico', {
+          cache: 'no-store',
+        })
         const payload = await response.json()
 
         if (!response.ok || !payload.ok) {
           throw new Error(payload.message || 'No se pudieron cargar los estados.')
         }
 
+        const remoteStates = Array.isArray(payload.items) ? payload.items : []
+        const nextStates = mergeStates(remoteStates)
+
         if (!cancelled) {
-          setStates(payload.items || [])
+          setStates(nextStates)
         }
       } catch (loadError) {
         console.error('Load states error:', loadError)
 
         if (!cancelled) {
-          setError('No se pudieron cargar los estados.')
+          setStates(MEXICO_STATE_FALLBACK)
+          setError('Usaremos el catálogo local de estados mientras se restablece el servicio de ubicación.')
         }
       } finally {
         if (!cancelled) {
@@ -161,7 +202,8 @@ export default function MexicoLocationSelect({
 
       try {
         const response = await fetch(
-          `/api/geo/mexico?stateCode=${encodeURIComponent(stateCode)}`
+          `/api/geo/mexico?stateCode=${encodeURIComponent(stateCode)}`,
+          { cache: 'no-store' }
         )
         const payload = await response.json()
 
@@ -172,13 +214,13 @@ export default function MexicoLocationSelect({
         }
 
         if (!cancelled) {
-          setMunicipalities(payload.items || [])
+          setMunicipalities(Array.isArray(payload.items) ? payload.items : [])
         }
       } catch (loadError) {
         console.error('Load municipalities error:', loadError)
 
         if (!cancelled) {
-          setError('No se pudieron cargar los municipios.')
+          setError('No se pudieron cargar los municipios. Puedes escribirlo manualmente en el selector.')
           setMunicipalities([])
         }
       } finally {
@@ -244,7 +286,7 @@ export default function MexicoLocationSelect({
   }, [pickerMode])
 
   const openPicker = (mode: PickerMode) => {
-    if (mode === 'state' && loadingStates) return
+    if (mode === 'state' && loadingStates && states.length === 0) return
     if (mode === 'municipality' && (!stateCode || loadingMunicipalities)) return
 
     setQuery('')
@@ -276,7 +318,25 @@ export default function MexicoLocationSelect({
     closePicker()
   }
 
-  const stateButtonText = loadingStates
+  const selectManualMunicipality = () => {
+    const cleanName = cleanDisplayName(query)
+    if (!cleanName) return
+
+    onChange({
+      stateCode,
+      stateName,
+      municipalityCode: `manual-${slugify(cleanName)}`.slice(0, 64),
+      municipalityName: cleanName,
+    })
+    closePicker()
+  }
+
+  const canUseManualMunicipality =
+    pickerMode === 'municipality' &&
+    cleanDisplayName(query).length >= 2 &&
+    filteredMunicipalities.length === 0
+
+  const stateButtonText = loadingStates && states.length === 0
     ? 'Cargando estados...'
     : stateName || 'Selecciona un estado'
 
@@ -293,7 +353,7 @@ export default function MexicoLocationSelect({
 
         <LocationButton
           label={stateButtonText}
-          disabled={loadingStates}
+          disabled={loadingStates && states.length === 0}
           selected={Boolean(stateCode)}
           onClick={() => openPicker('state')}
         />
@@ -302,7 +362,7 @@ export default function MexicoLocationSelect({
           type="hidden"
           name={`${labelPrefix || 'location'}_state_code`}
           value={stateCode}
-          required={required}
+          aria-required={required}
         />
       </div>
 
@@ -320,12 +380,12 @@ export default function MexicoLocationSelect({
           type="hidden"
           name={`${labelPrefix || 'location'}_municipality_code`}
           value={municipalityCode}
-          required={required}
+          aria-required={required}
         />
       </div>
 
       {error ? (
-        <p className="sm:col-span-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p className="sm:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           {error}
         </p>
       ) : null}
@@ -425,11 +485,26 @@ export default function MexicoLocationSelect({
                     </button>
                   ))}
 
+              {canUseManualMunicipality ? (
+                <button
+                  type="button"
+                  onClick={selectManualMunicipality}
+                  className="mt-1 flex w-full items-center justify-between gap-4 rounded-2xl border border-neutral-200 bg-neutral-950 px-4 py-3 text-left text-white transition hover:bg-neutral-800"
+                >
+                  <span className="text-sm font-semibold">
+                    Usar “{cleanDisplayName(query)}” como municipio
+                  </span>
+                  <span className="text-xs text-white/70">Manual</span>
+                </button>
+              ) : null}
+
               {(pickerMode === 'state'
                 ? filteredStates.length === 0
-                : filteredMunicipalities.length === 0) ? (
+                : filteredMunicipalities.length === 0 && !canUseManualMunicipality) ? (
                 <div className="p-8 text-center text-sm text-neutral-500">
-                  No encontramos resultados con esa búsqueda.
+                  {pickerMode === 'state'
+                    ? 'No encontramos resultados con esa búsqueda.'
+                    : 'No encontramos resultados. Escribe al menos 2 letras para capturarlo manualmente.'}
                 </div>
               ) : null}
             </div>
@@ -466,6 +541,38 @@ function LocationButton({
       </span>
     </button>
   )
+}
+
+function mergeStates(remoteStates: StateOption[]) {
+  const byCode = new Map<string, StateOption>()
+
+  for (const item of MEXICO_STATE_FALLBACK) {
+    byCode.set(item.code, item)
+  }
+
+  for (const item of remoteStates) {
+    if (!item?.code || !item?.name) continue
+    byCode.set(item.code, {
+      code: item.code,
+      fullCode: item.fullCode || item.code,
+      name: item.name,
+      abbreviation: item.abbreviation || null,
+    })
+  }
+
+  return Array.from(byCode.values()).sort((a, b) =>
+    a.name.localeCompare(b.name, 'es-MX')
+  )
+}
+
+function cleanDisplayName(value: string) {
+  return value.replace(/\s+/g, ' ').trim()
+}
+
+function slugify(value: string) {
+  return normalizeText(value)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
 }
 
 function normalizeText(value: string) {
