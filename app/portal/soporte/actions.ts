@@ -50,8 +50,12 @@ export async function createRamxSupportTicketAction(formData: FormData) {
 
   if (!order) {
     redirect(`/portal/soporte/nuevo?order=${encodeURIComponent(orderNumber)}&email=${encodeURIComponent(customerEmail)}&error=not_found`)
+    throw new Error('Orden no encontrada.')
   }
 
+  const verifiedOrder: CustomerOrderForSupport = order
+  const safeSubject = subject || 'Solicitud de soporte RAMX'
+  const safeDescription = description || 'El cliente solicitó soporte desde el portal RAMX.'
   const now = new Date().toISOString()
   const ticketNumber = buildTicketNumber()
   const category = SUPPORT_CATEGORIES.includes(categoryRaw as (typeof SUPPORT_CATEGORIES)[number])
@@ -62,17 +66,21 @@ export async function createRamxSupportTicketAction(formData: FormData) {
     .from('ramx_support_tickets')
     .insert({
       ticket_number: ticketNumber,
-      order_id: order.id,
-      order_number: order.order_number,
-      customer_name: customerName || order.customer_name || 'Cliente RAMX',
+      order_id: verifiedOrder.id,
+      order_number: verifiedOrder.order_number,
+      customer_name: customerName || verifiedOrder.customer_name || 'Cliente RAMX',
       customer_email: customerEmail,
-      customer_phone: customerPhone || order.customer_phone,
+      customer_phone: customerPhone || verifiedOrder.customer_phone,
       category,
       priority,
       status: 'new',
-      subject,
-      description,
+      subject: safeSubject,
+      description: safeDescription,
       source: 'portal',
+      tags: suggestTags(category, safeSubject, safeDescription),
+      sla_due_at: buildSlaDueAt(priority),
+      status_changed_at: now,
+      last_customer_message_at: now,
       last_message_at: now,
       created_at: now,
       updated_at: now,
@@ -87,9 +95,9 @@ export async function createRamxSupportTicketAction(formData: FormData) {
   const { error: messageError } = await admin.from('ramx_support_messages').insert({
     ticket_id: ticket.id,
     sender_type: 'customer',
-    author_name: customerName || order.customer_name || 'Cliente RAMX',
+    author_name: customerName || verifiedOrder.customer_name || 'Cliente RAMX',
     author_email: customerEmail,
-    body: description,
+    body: safeDescription,
     is_internal: false,
     created_at: now,
   })
@@ -150,8 +158,10 @@ export async function addCustomerRamxSupportReplyAction(formData: FormData) {
   await admin
     .from('ramx_support_tickets')
     .update({
-      status: ticket.status === 'resolved' ? 'customer_replied' : 'customer_replied',
+      status: 'customer_replied',
+      last_customer_message_at: now,
       last_message_at: now,
+      status_changed_at: now,
       updated_at: now,
     })
     .eq('id', ticket.id)
@@ -181,6 +191,26 @@ function buildTicketNumber() {
   const d = String(today.getDate()).padStart(2, '0')
   const suffix = Math.random().toString(36).slice(2, 6).toUpperCase()
   return `SUP-${y}${m}${d}-${suffix}`
+}
+
+function buildSlaDueAt(priority: string) {
+  const now = new Date()
+  const hours = priority === 'high' ? 12 : 24
+  now.setHours(now.getHours() + hours)
+  return now.toISOString()
+}
+
+function suggestTags(category: string, subject: string, description: string) {
+  const haystack = `${category} ${subject} ${description}`.toLowerCase()
+  const tags = new Set<string>([category.replaceAll('_', '-')])
+
+  if (haystack.includes('pago') || haystack.includes('mercado')) tags.add('pago')
+  if (haystack.includes('guía') || haystack.includes('guia') || haystack.includes('envío') || haystack.includes('envio')) tags.add('envio')
+  if (haystack.includes('qr') || haystack.includes('nfc') || haystack.includes('activ')) tags.add('activacion')
+  if (haystack.includes('placa') || haystack.includes('perd')) tags.add('placa')
+  if (haystack.includes('mascota') || haystack.includes('extravi')) tags.add('mascota')
+
+  return Array.from(tags).slice(0, 8)
 }
 
 function clean(value: FormDataEntryValue | null) {
