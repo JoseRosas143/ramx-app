@@ -6,7 +6,7 @@ export type RamxKnowledgeArticle = {
   content: string;
 };
 
-const RAMX_KNOWLEDGE_BASE: RamxKnowledgeArticle[] = [
+export const RAMX_STATIC_KNOWLEDGE_BASE: RamxKnowledgeArticle[] = [
   {
     id: "ramx-overview",
     title: "Qué es RAMX",
@@ -129,7 +129,7 @@ const RAMX_KNOWLEDGE_BASE: RamxKnowledgeArticle[] = [
   },
 ];
 
-export function buildRamxKnowledgeContext(input: { messages: Array<{ role: string; content: string }>; orderContextExists: boolean }) {
+export function buildRamxKnowledgeContext(input: { messages: Array<{ role: string; content: string }>; orderContextExists: boolean; customArticles?: RamxKnowledgeArticle[] }) {
   const text = input.messages
     .map((message) => message.content || "")
     .join(" ")
@@ -137,7 +137,9 @@ export function buildRamxKnowledgeContext(input: { messages: Array<{ role: strin
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
-  const scored = RAMX_KNOWLEDGE_BASE.map((article) => {
+  const knowledgeBase = mergeKnowledgeArticles(RAMX_STATIC_KNOWLEDGE_BASE, input.customArticles || []);
+
+  const scored = knowledgeBase.map((article) => {
     const title = normalize(article.title);
     const category = normalize(article.category);
     const keywordScore = article.keywords.reduce((score, keyword) => {
@@ -157,11 +159,11 @@ export function buildRamxKnowledgeContext(input: { messages: Array<{ role: strin
     .map((item) => item.article);
 
   if (!selected.some((article) => article.id === "ramx-overview")) {
-    selected.unshift(RAMX_KNOWLEDGE_BASE[0]);
+    selected.unshift(knowledgeBase[0]);
   }
 
   if (!selected.some((article) => article.id === "support-tickets")) {
-    const support = RAMX_KNOWLEDGE_BASE.find((article) => article.id === "support-tickets");
+    const support = knowledgeBase.find((article) => article.id === "support-tickets");
     if (support) selected.push(support);
   }
 
@@ -179,7 +181,7 @@ export function buildRamxKnowledgeContext(input: { messages: Array<{ role: strin
 
 export function buildRamxLocalSupportAnswer(message: string) {
   const text = normalize(message);
-  const match = RAMX_KNOWLEDGE_BASE
+  const match = RAMX_STATIC_KNOWLEDGE_BASE
     .map((article) => ({
       article,
       score: article.keywords.reduce((score, keyword) => score + (text.includes(normalize(keyword)) ? 1 : 0), 0),
@@ -191,6 +193,24 @@ export function buildRamxLocalSupportAnswer(message: string) {
   }
 
   return match.article.content;
+}
+
+function mergeKnowledgeArticles(staticArticles: RamxKnowledgeArticle[], customArticles: RamxKnowledgeArticle[]) {
+  const byId = new Map<string, RamxKnowledgeArticle>();
+
+  for (const article of staticArticles) {
+    byId.set(article.id, article);
+  }
+
+  for (const article of customArticles) {
+    if (!article.title || !article.content) continue;
+    byId.set(article.id || `custom-${normalize(article.title)}`, {
+      ...article,
+      keywords: Array.isArray(article.keywords) ? article.keywords : [],
+    });
+  }
+
+  return Array.from(byId.values());
 }
 
 function normalize(value: string) {

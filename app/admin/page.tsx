@@ -95,7 +95,24 @@ export default async function AdminHomePage() {
               Revisa tickets, mensajes, solicitudes por orden, soporte y add-ons.
             </p>
           </Link>
-        </section>
+
+
+          <Link
+            href="/admin/support/knowledge"
+            className="rounded-[28px] border border-white/80 bg-white/90 p-6 shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-xl">
+              🧠
+            </div>
+
+            <h2 className="mt-5 text-xl font-semibold tracking-tight text-neutral-950">
+              Base IA
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-neutral-600">
+              Mejora respuestas del chat de soporte con artículos editables sin código.
+            </p>
+          </Link>        </section>
       </div>
     </main>
   );

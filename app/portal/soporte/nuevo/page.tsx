@@ -6,6 +6,8 @@ type PageProps = {
   searchParams?: Promise<{
     order?: string;
     email?: string;
+    category?: string;
+    subject?: string;
     error?: string;
   }>;
 };
@@ -15,6 +17,8 @@ export default async function NewCustomerSupportTicketPage({ searchParams }: Pag
   const orderNumber = normalizeOrderNumber(query.order);
   const email = normalizeEmail(query.email);
   const error = query.error || "";
+  const suggestedCategory = normalizeCategory(query.category);
+  const suggestedSubject = normalizeSubject(query.subject);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#fff7ed_0%,transparent_34%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_55%,#f8fafc_100%)] px-4 py-10 text-neutral-950 sm:px-6">
@@ -51,7 +55,7 @@ export default async function NewCustomerSupportTicketPage({ searchParams }: Pag
             <div className="grid gap-5 md:grid-cols-2">
               <label className="block">
                 <span className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">Categoría</span>
-                <select name="category" className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-medium outline-none transition focus:border-neutral-950 focus:ring-4 focus:ring-neutral-950/5">
+                <select name="category" defaultValue={suggestedCategory} className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-medium outline-none transition focus:border-neutral-950 focus:ring-4 focus:ring-neutral-950/5">
                   <option value="pedido_preventa">Pedido / preventa</option>
                   <option value="pago_mercado_pago">Pago Mercado Pago</option>
                   <option value="activacion_qr_nfc">Activación QR/NFC</option>
@@ -74,7 +78,7 @@ export default async function NewCustomerSupportTicketPage({ searchParams }: Pag
               </label>
             </div>
 
-            <Field label="Asunto" name="subject" placeholder="Ej. No puedo activar mi placa" required />
+            <Field label="Asunto" name="subject" defaultValue={suggestedSubject} placeholder="Ej. No puedo activar mi placa" required />
 
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">Mensaje</span>
@@ -125,4 +129,25 @@ function normalizeOrderNumber(value: string | undefined) {
 
 function normalizeEmail(value: string | undefined) {
   return String(value || "").trim().toLowerCase().slice(0, 160);
+}
+
+function normalizeCategory(value: string | undefined) {
+  const valid = new Set([
+    "pedido_preventa",
+    "pago_mercado_pago",
+    "activacion_qr_nfc",
+    "registro_mascota",
+    "modo_extraviado",
+    "cuenta_acceso",
+    "garantia_reposicion",
+    "donacion",
+    "premium_addons",
+    "otro",
+  ]);
+  const clean = String(value || "").trim();
+  return valid.has(clean) ? clean : "pedido_preventa";
+}
+
+function normalizeSubject(value: string | undefined) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, 140);
 }

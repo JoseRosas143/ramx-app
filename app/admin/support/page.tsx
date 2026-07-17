@@ -88,9 +88,14 @@ export default async function AdminSupportPage({ searchParams }: PageProps) {
                 Bandeja tipo Jira para solicitudes de clientes conectadas a órdenes, pagos, guías y activaciones.
               </p>
             </div>
-            <Link href="/portal/soporte" className="rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm font-semibold text-neutral-800 transition hover:-translate-y-0.5 hover:shadow-md">
-              Ver portal cliente
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/admin/support/knowledge" className="rounded-2xl bg-neutral-950 px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800">
+                Base de conocimiento IA
+              </Link>
+              <Link href="/portal/soporte" className="rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm font-semibold text-neutral-800 transition hover:-translate-y-0.5 hover:shadow-md">
+                Ver portal cliente
+              </Link>
+            </div>
           </div>
         </section>
 

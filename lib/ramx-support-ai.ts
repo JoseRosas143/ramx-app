@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { buildRamxKnowledgeContext, buildRamxLocalSupportAnswer } from "@/lib/ramx-support-knowledge";
+import { buildRamxKnowledgeContext, buildRamxLocalSupportAnswer, type RamxKnowledgeArticle } from "@/lib/ramx-support-knowledge";
 
 export type RamxSupportAiMessage = {
   role: "user" | "assistant";
@@ -146,7 +146,8 @@ export async function createRamxSupportAiAnswer(input: {
     : null;
 
   const model = process.env.OPENAI_SUPPORT_MODEL || "gpt-4.1-mini";
-  const prompt = buildPrompt({ messages, orderContext });
+  const customArticles = await getEditableRamxKnowledgeArticles();
+  const prompt = buildPrompt({ messages, orderContext, customArticles });
 
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -186,8 +187,51 @@ export async function createRamxSupportAiAnswer(input: {
   } satisfies RamxSupportAiResponse;
 }
 
-function buildPrompt({ messages, orderContext }: { messages: RamxSupportAiMessage[]; orderContext: OrderContext | null }) {
-  const knowledgeContext = buildRamxKnowledgeContext({ messages, orderContextExists: Boolean(orderContext) });
+async function getEditableRamxKnowledgeArticles(): Promise<RamxKnowledgeArticle[]> {
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("ramx_support_knowledge_articles")
+      .select("slug,title,category,keywords,content,sort_order")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("updated_at", { ascending: false })
+      .limit(40);
+
+    if (error) {
+      console.error("RAMX editable knowledge query error:", error.message);
+      return [];
+    }
+
+    return (data || [])
+      .map((row: Record<string, unknown>) => ({
+        id: `admin-${toText(row.slug) || toText(row.title) || "article"}`,
+        title: toText(row.title) || "Artículo RAMX",
+        category: toText(row.category) || "soporte",
+        keywords: normalizeKeywords(row.keywords),
+        content: toText(row.content) || "",
+      }))
+      .filter((article) => article.title && article.content);
+  } catch (error) {
+    console.error("RAMX editable knowledge failed:", error);
+    return [];
+  }
+}
+
+function normalizeKeywords(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 20);
+  }
+
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+function buildPrompt({ messages, orderContext, customArticles }: { messages: RamxSupportAiMessage[]; orderContext: OrderContext | null; customArticles: RamxKnowledgeArticle[] }) {
+  const knowledgeContext = buildRamxKnowledgeContext({ messages, orderContextExists: Boolean(orderContext), customArticles });
   const conversation = messages
     .slice(-10)
     .map((message) => `${message.role === "assistant" ? "Asistente RAMX" : "Cliente"}: ${message.content}`)

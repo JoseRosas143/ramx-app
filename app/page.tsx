@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { FloatingSupportAiChat } from '@/components/support/floating-support-ai-chat'
 
 const RAMX_LOGO_URL =
   'https://esxkbfyphnthqcxfpkte.supabase.co/storage/v1/object/public/Brand%20kit/Logo.jpg'
@@ -115,9 +116,19 @@ const [searchMessage, setSearchMessage] = useState('')
             <Link href="/tienda" className="transition hover:text-neutral-950">
               Tienda
             </Link>
+            <Link href="/portal" className="transition hover:text-neutral-950">
+              Portal cliente
+            </Link>
           </nav>
 
           <div className="flex items-center gap-2">
+            <Link
+              href="/portal"
+              className="hidden rounded-full px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-white md:inline-flex"
+            >
+              Portal cliente
+            </Link>
+
             <Link
               href="/auth/login"
               className="hidden rounded-full px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-white sm:inline-flex"
@@ -199,6 +210,13 @@ const [searchMessage, setSearchMessage] = useState('')
                 className="inline-flex items-center justify-center rounded-2xl border border-orange-200 bg-orange-50 px-6 py-4 text-sm font-semibold text-orange-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-orange-100 hover:shadow-md"
               >
                 Ver placas QR/NFC
+              </Link>
+
+              <Link
+                href="/portal/ordenes"
+                className="inline-flex items-center justify-center rounded-2xl border border-sky-200 bg-white px-6 py-4 text-sm font-semibold text-sky-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-sky-50 hover:shadow-md"
+              >
+                Consultar mi pedido
               </Link>
             </div>
           </div>
@@ -545,6 +563,9 @@ const [searchMessage, setSearchMessage] = useState('')
             <Link href="/tienda" className="font-medium text-neutral-700">
               Tienda
             </Link>
+            <Link href="/portal" className="font-medium text-neutral-700">
+              Portal cliente
+            </Link>
             <a
               href={RAMX_FACEBOOK_URL}
               target="_blank"
@@ -564,6 +585,7 @@ const [searchMessage, setSearchMessage] = useState('')
           </div>
         </footer>
       </section>
+      <FloatingSupportAiChat />
     </main>
   )
 }
