@@ -21,9 +21,11 @@ type AiResponse = {
 };
 
 const QUICK_PROMPTS = [
-  "No puedo activar mi placa QR/NFC",
+  "¿Cómo activo mi placa QR/NFC?",
   "Quiero saber el estado de mi pedido",
   "Mi pago aparece pendiente",
+  "No me llegó el correo de confirmación",
+  "¿Qué incluye cada combo RAMX?",
   "Perdí mi placa RAMX",
 ];
 
@@ -45,7 +47,7 @@ export function SupportAiChat({ orderNumber = "", email = "" }: SupportAiChatPro
     {
       role: "assistant",
       content:
-        "Hola, soy el asistente RAMX. Antes de crear un ticket puedo ayudarte con pedidos, pagos, activación QR/NFC, guías, cuenta o preventa. ¿Qué necesitas resolver?",
+        "Hola, soy el asistente RAMX. Puedo ayudarte con preventa, pedidos, pagos, activación QR/NFC, guías, cuenta, modo extraviado y productos RAMX. Si hace falta intervención humana, preparo tu ticket con el contexto completo. ¿Qué necesitas resolver?",
     },
   ]);
   const [input, setInput] = useState("");
@@ -127,11 +129,11 @@ export function SupportAiChat({ orderNumber = "", email = "" }: SupportAiChatPro
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="inline-flex rounded-full border border-sky-200 bg-white/80 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-sky-700">
-            Asistente IA RAMX
+            Asistente IA RAMX · Base de conocimiento
           </p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight text-neutral-950">Resolvamos antes de crear un ticket.</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">
-            Pregunta sobre tu pedido, pago, activación QR/NFC, guía o cuenta. Si hace falta intervención humana, te ayudamos a preparar la solicitud.
+            Pregunta sobre preventa, productos, pedidos, pagos, activación QR/NFC, guía, cuenta o modo extraviado. Si hace falta intervención humana, el asistente prepara la solicitud con la conversación.
           </p>
         </div>
         {suggestion ? (
@@ -153,7 +155,7 @@ export function SupportAiChat({ orderNumber = "", email = "" }: SupportAiChatPro
         {isLoading ? (
           <div className="flex justify-start">
             <div className="rounded-[22px] border border-neutral-100 bg-white px-4 py-3 text-sm text-neutral-500 shadow-sm">
-              RAMX está revisando tu caso...
+              RAMX está consultando la base de conocimiento...
             </div>
           </div>
         ) : null}

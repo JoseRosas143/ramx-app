@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { buildRamxKnowledgeContext, buildRamxLocalSupportAnswer } from "@/lib/ramx-support-knowledge";
 
 export type RamxSupportAiMessage = {
   role: "user" | "assistant";
@@ -118,20 +119,19 @@ export async function createRamxSupportAiAnswer(input: {
   orderNumber?: string;
   email?: string;
 }) {
+  const messages = sanitizeMessages(input.messages);
+  const lastMessage = messages[messages.length - 1]?.content || "";
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
     return {
-      answer:
-        "Aún no está configurado el asistente de IA de RAMX. Puedes crear una solicitud y el equipo RAMX te ayudará directamente.",
+      answer: `${buildRamxLocalSupportAnswer(lastMessage || "ayuda RAMX")}\n\nSi esto no resuelve tu caso, crea una solicitud y el equipo RAMX lo revisará.`,
       shouldCreateTicket: true,
-      suggestedCategory: "otro",
-      suggestedSubject: "Ayuda RAMX",
+      suggestedCategory: inferCategory(lastMessage),
+      suggestedSubject: buildSubject(lastMessage),
     } satisfies RamxSupportAiResponse;
   }
 
-  const messages = sanitizeMessages(input.messages);
-  const lastMessage = messages[messages.length - 1]?.content || "";
   if (!lastMessage) {
     return {
       answer: "Cuéntame qué necesitas resolver con tu pedido, pago, activación o cuenta RAMX.",
@@ -187,6 +187,7 @@ export async function createRamxSupportAiAnswer(input: {
 }
 
 function buildPrompt({ messages, orderContext }: { messages: RamxSupportAiMessage[]; orderContext: OrderContext | null }) {
+  const knowledgeContext = buildRamxKnowledgeContext({ messages, orderContextExists: Boolean(orderContext) });
   const conversation = messages
     .slice(-10)
     .map((message) => `${message.role === "assistant" ? "Asistente RAMX" : "Cliente"}: ${message.content}`)
@@ -208,19 +209,28 @@ function buildPrompt({ messages, orderContext }: { messages: RamxSupportAiMessag
       }, null, 2)
     : "No hay orden validada en contexto. Si se requiere información privada, pide número de orden y correo o recomienda crear ticket.";
 
-  return `Eres el asistente de soporte de RAMX, una plataforma de identidad digital para mascotas con placas QR/NFC, microchip, tienda, preventa, Mercado Pago, portal de cliente y activación de productos.
+  return `Eres el asistente de soporte de RAMX. RAMX es una plataforma de identidad digital para mascotas con tienda, preventa, productos físicos QR/NFC, microchip, activación de productos, perfil público, portal de cliente, Mercado Pago y soporte.
 
-Objetivo: resolver dudas antes de que el cliente cree un ticket. Responde en español mexicano, cálido, breve y profesional.
+Objetivo: resolver dudas antes de que el cliente cree un ticket. Responde como soporte premium: humano, claro, cálido, específico y útil. Evita respuestas genéricas.
 
-Reglas:
-- No inventes datos de orden, pago, guía, fechas o políticas.
-- Si hay contexto de orden, úsalo para orientar sin exponer datos sensibles innecesarios.
-- Si no hay contexto validado, pide número de orden y correo o sugiere crear ticket.
-- No prometas reembolsos, entregas, garantías o aprobaciones de pago. Di que RAMX lo revisará.
-- No des consejo veterinario médico. Para urgencias veterinarias, recomienda acudir a una clínica o veterinario.
-- Para mascota extraviada, orienta a activar modo extraviado/actualizar perfil y crear ticket si requiere ayuda.
-- Si el problema requiere intervención humana, marca shouldCreateTicket=true.
-- Si lo puedes resolver con instrucciones claras, shouldCreateTicket=false.
+Base de conocimiento RAMX que debes usar como fuente principal:
+${knowledgeContext}
+
+Reglas de respuesta:
+- Responde en español mexicano, con tono amable, seguro y profesional.
+- Da pasos concretos cuando aplique. Usa listas cortas, no párrafos largos.
+- No inventes datos de orden, pago, guía, fechas de entrega, garantías, reembolsos o disponibilidad.
+- Si hay contexto de orden validada, úsalo para orientar: estado, pago, guía, producto y siguiente paso.
+- Si el cliente pregunta por datos privados y no hay orden validada, pide número de orden y correo de compra.
+- No prometas aprobación de pagos, devoluciones, tiempos exactos de entrega ni garantías automáticas.
+- No des diagnóstico ni tratamiento veterinario. En urgencias, recomienda acudir con un veterinario o clínica.
+- Para mascota extraviada, orienta a activar modo extraviado, revisar contacto del perfil y crear ticket si necesita intervención humana.
+- Si el cliente necesita que RAMX cambie algo, revise pago, modifique dirección/correo, reenvíe correo, desbloquee código, reponga producto o vea una incidencia, marca shouldCreateTicket=true.
+- Si lo puedes resolver con instrucciones claras y no requiere revisión humana, marca shouldCreateTicket=false.
+- No menciones que usas una base de conocimiento ni detalles técnicos internos.
+
+Criterios para sugerir ticket:
+- Pago cobrado pero no confirmado, pago rechazado sin explicación, pedido sin guía que requiere revisión, cambio de dirección, cambio de correo/teléfono, código QR/NFC inválido, producto ya activado por error, problema de acceso persistente, reposición, garantía, devolución, producto faltante, caso sensible o solicitud humana.
 
 Categorías válidas:
 pedido_preventa, pago_mercado_pago, activacion_qr_nfc, registro_mascota, modo_extraviado, cuenta_acceso, garantia_reposicion, donacion, premium_addons, otro.
@@ -233,7 +243,7 @@ ${conversation}
 
 Responde ÚNICAMENTE JSON válido con esta forma:
 {
-  "answer": "respuesta para el cliente",
+  "answer": "respuesta para el cliente con pasos concretos",
   "shouldCreateTicket": true,
   "suggestedCategory": "activacion_qr_nfc",
   "suggestedSubject": "asunto corto para ticket"
