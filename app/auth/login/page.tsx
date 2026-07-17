@@ -24,6 +24,7 @@ function LoginContent() {
   const searchParams = useSearchParams()
 
   const confirmed = searchParams.get('confirmed') === '1'
+  const nextPath = sanitizeNextPath(searchParams.get('next'))
 
   const [mode, setMode] = useState<'login' | 'forgot'>('login')
   const [email, setEmail] = useState('')
@@ -71,7 +72,7 @@ function LoginContent() {
         return
       }
 
-      router.push('/dashboard')
+      router.push(nextPath || '/dashboard')
       router.refresh()
     } catch (error) {
       console.error('Unexpected login error:', error)
@@ -291,4 +292,10 @@ function getFriendlyAuthError(message: string) {
   }
 
   return message || 'No se pudo iniciar sesión. Intenta nuevamente.'
+}
+
+function sanitizeNextPath(value: string | null) {
+  if (!value || !value.startsWith('/')) return null
+  if (value.startsWith('//')) return null
+  return value
 }

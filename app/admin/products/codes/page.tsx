@@ -20,6 +20,8 @@ type PhysicalCode = {
   status: string
   assigned_pet_id: string | null
   assigned_profile_id: string | null
+  assigned_order_id?: string | null
+  assigned_at?: string | null
   activated_at: string | null
   created_at: string
   notes: string | null
@@ -33,7 +35,7 @@ type PetInfo = {
   public_slug: string | null
 }
 
-const STATUS_FILTERS = ['all', 'available', 'reserved', 'activated', 'disabled']
+const STATUS_FILTERS = ['all', 'available', 'reserved', 'assigned', 'activated', 'blocked', 'disabled', 'replaced']
 const PRINTED_FILTERS = ['all', 'printed', 'not_printed']
 
 export default async function AdminPhysicalCodesPage({
@@ -60,6 +62,8 @@ export default async function AdminPhysicalCodesPage({
       status,
       assigned_pet_id,
       assigned_profile_id,
+      assigned_order_id,
+      assigned_at,
       activated_at,
       created_at,
       notes,
@@ -126,8 +130,11 @@ export default async function AdminPhysicalCodesPage({
   const activatedCount = allStats.filter(
     (item) => item.status === 'activated'
   ).length
+  const assignedCount = allStats.filter(
+    (item) => item.status === 'assigned'
+  ).length
   const disabledCount = allStats.filter(
-    (item) => item.status === 'disabled'
+    (item) => item.status === 'disabled' || item.status === 'blocked'
   ).length
   const printedCount = allStats.filter((item) => item.is_printed).length
 
@@ -175,8 +182,8 @@ export default async function AdminPhysicalCodesPage({
 
           <div className="mt-6 grid gap-3 sm:grid-cols-4">
             <Stat label="Disponibles" value={availableCount} />
+            <Stat label="Asignados" value={assignedCount} />
             <Stat label="Activados" value={activatedCount} />
-            <Stat label="Desactivados" value={disabledCount} />
             <Stat label="Impresos" value={printedCount} />
           </div>
         </section>
@@ -197,6 +204,9 @@ export default async function AdminPhysicalCodesPage({
                 defaultValue="qr_plate"
                 className="h-12 w-full rounded-2xl border border-neutral-300 bg-white px-4 text-sm outline-none focus:border-neutral-950"
               >
+                <option value="placa_inteligente_nfc_qr">Placa Inteligente NFC/Qr</option>
+                <option value="combo_identificacion_inteligente">Combo Identificación Inteligente</option>
+                <option value="combo_identidad_inteligente">Combo Identidad Inteligente</option>
                 <option value="qr_plate">Placa QR</option>
                 <option value="qr_nfc_plate">Placa QR + NFC</option>
                 <option value="nfc_card">Tarjeta NFC</option>
@@ -287,8 +297,11 @@ export default async function AdminPhysicalCodesPage({
                 <option value="all">Todos</option>
                 <option value="available">Disponibles</option>
                 <option value="reserved">Reservados</option>
+                <option value="assigned">Asignados</option>
                 <option value="activated">Activados</option>
+                <option value="blocked">Bloqueados</option>
                 <option value="disabled">Desactivados</option>
+                <option value="replaced">Reemplazados</option>
               </select>
             </label>
 

@@ -220,6 +220,15 @@ export default async function PhysicalProductOrderSuccessPage({
           >
             Volver a tienda
           </Link>
+
+          {query.order ? (
+            <Link
+              href={`/portal/ordenes?order=${encodeURIComponent(query.order)}`}
+              className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-5 py-3 text-sm font-semibold text-neutral-800 transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              Ver en portal de cliente
+            </Link>
+          ) : null}
         </div>
       </section>
     </main>

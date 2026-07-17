@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
     const result = await syncRamxMercadoPagoByPaymentId(paymentId, "webhook");
 
     return NextResponse.json({
-      ok: true,
       action,
       ...result,
     });

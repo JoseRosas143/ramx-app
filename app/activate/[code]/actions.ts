@@ -27,7 +27,7 @@ export async function activatePhysicalCodeAction(formData: FormData) {
 
   const { data: physicalCode, error: codeError } = await admin
     .from('ramx_physical_codes')
-    .select('id, code, status, assigned_pet_id, assigned_profile_id, deleted_at')
+    .select('id, code, product_type, status, assigned_pet_id, assigned_profile_id, assigned_order_id, deleted_at')
     .eq('code', code)
     .is('deleted_at', null)
     .maybeSingle()
@@ -36,8 +36,8 @@ export async function activatePhysicalCodeAction(formData: FormData) {
     throw new Error('Este código RAMX no existe o no es válido.')
   }
 
-  if (physicalCode.status === 'disabled') {
-    throw new Error('Este código RAMX está desactivado.')
+  if (physicalCode.status === 'disabled' || physicalCode.status === 'blocked' || physicalCode.status === 'replaced') {
+    throw new Error('Este código RAMX no está disponible para activación.')
   }
 
   if (physicalCode.status === 'activated') {
@@ -57,7 +57,7 @@ export async function activatePhysicalCodeAction(formData: FormData) {
   }
 
   if (
-    physicalCode.status === 'reserved' &&
+    ['reserved', 'assigned'].includes(physicalCode.status) &&
     physicalCode.assigned_profile_id &&
     physicalCode.assigned_profile_id !== user.id
   ) {
@@ -84,6 +84,7 @@ export async function activatePhysicalCodeAction(formData: FormData) {
       assigned_pet_id: pet.id,
       activated_at: now,
       disabled_at: null,
+      blocked_at: null,
     })
     .eq('id', physicalCode.id)
 
@@ -96,9 +97,22 @@ export async function activatePhysicalCodeAction(formData: FormData) {
     code: physicalCode.code,
     profile_id: user.id,
     pet_id: pet.id,
+    order_id: physicalCode.assigned_order_id || null,
     status: 'active',
     assigned_at: now,
   })
+
+  if (physicalCode.assigned_order_id) {
+    await admin
+      .from('ramx_order_product_codes')
+      .update({
+        status: 'activated',
+        activated_at: now,
+        updated_at: now,
+      })
+      .eq('code_id', physicalCode.id)
+      .eq('order_id', physicalCode.assigned_order_id)
+  }
 
   await admin.from('ramx_product_scan_events').insert({
     code_id: physicalCode.id,

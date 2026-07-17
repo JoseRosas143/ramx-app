@@ -23,7 +23,14 @@ export default function Page() {
 
   const getEmailRedirectTo = () => {
     if (typeof window === 'undefined') return undefined
-    return `${window.location.origin}/auth/login?confirmed=1`
+
+    const currentUrl = new URL(window.location.href)
+    const nextPath = sanitizeNextPath(currentUrl.searchParams.get('next'))
+    const params = new URLSearchParams({ confirmed: '1' })
+
+    if (nextPath) params.set('next', nextPath)
+
+    return `${window.location.origin}/auth/login?${params.toString()}`
   }
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -299,4 +306,10 @@ export default function Page() {
       </div>
     </main>
   )
+}
+
+function sanitizeNextPath(value: string | null) {
+  if (!value || !value.startsWith('/')) return null
+  if (value.startsWith('//')) return null
+  return value
 }

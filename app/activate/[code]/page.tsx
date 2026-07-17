@@ -48,6 +48,7 @@ export default async function ActivatePhysicalCodePage({
       status,
       assigned_pet_id,
       assigned_profile_id,
+      assigned_order_id,
       deleted_at,
       activated_at
     `
@@ -119,15 +120,15 @@ export default async function ActivatePhysicalCodePage({
             />
           ) : null}
 
-          {physicalCode?.status === 'disabled' || query.status === 'disabled' ? (
+          {['disabled', 'blocked', 'replaced'].includes(String(physicalCode?.status || query.status || '')) ? (
             <MessageBox
               tone="error"
-              title="Código desactivado"
-              text="Este producto fue desactivado y no puede vincularse a una mascota."
+              title="Código no disponible"
+              text="Este producto está bloqueado, desactivado o fue reemplazado y no puede vincularse a una mascota."
             />
           ) : null}
 
-          {physicalCode && physicalCode.status !== 'disabled' ? (
+          {physicalCode && !['disabled', 'blocked', 'replaced'].includes(physicalCode.status) ? (
             <div className="mt-6 rounded-3xl border border-sky-100 bg-sky-50 p-4">
               <p className="text-sm font-semibold text-sky-950">
                 {getProductLabel(physicalCode.product_type)}
@@ -139,7 +140,7 @@ export default async function ActivatePhysicalCodePage({
             </div>
           ) : null}
 
-          {!user && physicalCode && physicalCode.status !== 'disabled' ? (
+          {!user && physicalCode && !['disabled', 'blocked', 'replaced'].includes(physicalCode.status) ? (
             <div className="mt-6 rounded-3xl border border-neutral-200 bg-neutral-50 p-5">
               <h2 className="text-lg font-semibold text-neutral-950">
                 Inicia sesión para continuar
@@ -151,14 +152,14 @@ export default async function ActivatePhysicalCodePage({
 
               <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                 <Link
-                  href="/auth/login"
+                  href={`/auth/login?next=${encodeURIComponent(`/activate/${normalizedCode}`)}`}
                   className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-neutral-800"
                 >
                   Iniciar sesión
                 </Link>
 
                 <Link
-                  href="/auth/register"
+                  href={`/auth/register?next=${encodeURIComponent(`/activate/${normalizedCode}`)}`}
                   className="inline-flex items-center justify-center rounded-2xl border border-neutral-300 bg-white px-5 py-3 text-sm font-semibold text-neutral-800 transition hover:-translate-y-0.5 hover:shadow-md"
                 >
                   Crear cuenta
@@ -167,7 +168,7 @@ export default async function ActivatePhysicalCodePage({
             </div>
           ) : null}
 
-          {user && physicalCode && physicalCode.status !== 'disabled' ? (
+          {user && physicalCode && !['disabled', 'blocked', 'replaced'].includes(physicalCode.status) ? (
             petOptions.length > 0 ? (
               <form action={activatePhysicalCodeAction} className="mt-6 space-y-5">
                 <input type="hidden" name="code" value={normalizedCode} />
@@ -252,6 +253,9 @@ function getProductLabel(productType: string) {
     nfc_card: 'Tarjeta NFC',
     kit: 'Kit RAMX',
     other: 'Producto RAMX',
+    placa_inteligente_nfc_qr: 'Placa Inteligente NFC/Qr',
+    combo_identificacion_inteligente: 'Combo Identificación Inteligente',
+    combo_identidad_inteligente: 'Combo Identidad Inteligente',
   }
 
   return labels[productType] || 'Producto RAMX'

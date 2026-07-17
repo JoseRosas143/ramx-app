@@ -25,6 +25,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       id,
       code,
       status,
+      assigned_order_id,
       assigned_pet_id,
       deleted_at
     `
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     )
   }
 
-  if (physicalCode.status === 'disabled') {
+  if (physicalCode.status === 'disabled' || physicalCode.status === 'blocked' || physicalCode.status === 'replaced') {
     return NextResponse.redirect(
       new URL(
         `/activate/${encodeURIComponent(normalizedCode)}?status=disabled`,
@@ -54,7 +55,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     await supabase.from('ramx_product_scan_events').insert({
       code_id: physicalCode.id,
       code: physicalCode.code,
-      source: 'redirect_unactivated',
+      source: physicalCode.status === 'assigned' ? 'redirect_assigned_unactivated' : 'redirect_unactivated',
+      user_agent: request.headers.get('user-agent'),
     })
 
     return NextResponse.redirect(

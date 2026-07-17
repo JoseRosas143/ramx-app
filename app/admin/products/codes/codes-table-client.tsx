@@ -21,6 +21,8 @@ type PhysicalCodeRow = {
   batch_name: string | null
   status: string
   assigned_pet_id: string | null
+  assigned_order_id?: string | null
+  assigned_at?: string | null
   activated_at: string | null
   created_at: string
   notes: string | null
@@ -289,7 +291,10 @@ export default function CodesTableClient({
                           >
                             <option value="available">Disponible</option>
                             <option value="reserved">Reservado</option>
+                            <option value="assigned">Asignado</option>
+                            <option value="blocked">Bloqueado</option>
                             <option value="disabled">Desactivado</option>
+                            <option value="replaced">Reemplazado</option>
                           </select>
 
                           <button
@@ -356,7 +361,10 @@ function StatusBadge({ status }: { status: string }) {
     available: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     reserved: 'bg-amber-50 text-amber-700 border-amber-200',
     activated: 'bg-sky-50 text-sky-700 border-sky-200',
+    assigned: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    blocked: 'bg-red-50 text-red-700 border-red-200',
     disabled: 'bg-neutral-100 text-neutral-600 border-neutral-200',
+    replaced: 'bg-violet-50 text-violet-700 border-violet-200',
   }
 
   return (
@@ -389,7 +397,11 @@ function getStatusLabel(status: string) {
     available: 'Disponible',
     reserved: 'Reservado',
     activated: 'Activado',
+    assigned: 'Asignado',
+    blocked: 'Bloqueado',
     disabled: 'Desactivado',
+    replaced: 'Reemplazado',
+    released: 'Liberado',
   }
 
   return labels[status] || status
@@ -402,6 +414,9 @@ function getProductLabel(productType: string) {
     nfc_card: 'Tarjeta NFC',
     kit: 'Kit RAMX',
     other: 'Otro',
+    placa_inteligente_nfc_qr: 'Placa Inteligente NFC/Qr',
+    combo_identificacion_inteligente: 'Combo Identificación',
+    combo_identidad_inteligente: 'Combo Identidad',
   }
 
   return labels[productType] || productType

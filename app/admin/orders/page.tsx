@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import OrderCrmActionsClient from "./order-crm-actions-client";
 import {
   archiveRamxOrderAction,
+  assignRamxPhysicalCodeToOrderAction,
+  releaseRamxPhysicalCodeFromOrderAction,
   resendRamxOrderConfirmationAction,
   unarchiveRamxOrderAction,
   verifyRamxOrderMercadoPagoPaymentAction,
@@ -56,13 +58,25 @@ type OrderRow = {
   admin_notes: string | null;
   archived_at: string | null;
   archived_reason: string | null;
-  pets?: {
-    id: string;
-    name: string | null;
-    public_slug: string | null;
-    microchip_number: string | null;
-    internal_id: string | null;
-  } | null;
+  product_assigned_at: string | null;
+  product_assigned_notified_at: string | null;
+  assigned_codes?: OrderAssignedCode[];
+  pets?:
+    | {
+        id: string;
+        name: string | null;
+        public_slug: string | null;
+        microchip_number: string | null;
+        internal_id: string | null;
+      }
+    | Array<{
+        id: string;
+        name: string | null;
+        public_slug: string | null;
+        microchip_number: string | null;
+        internal_id: string | null;
+      }>
+    | null;
   ramx_order_items?: Array<{
     id: string;
     product_type: string;
@@ -71,6 +85,26 @@ type OrderRow = {
     unit_price: number | string | null;
     subtotal: number | string | null;
   }> | null;
+};
+
+type OrderAssignedCode = {
+  id: string;
+  order_id: string;
+  code_id: string;
+  code: string;
+  product_type: string;
+  status: string;
+  assigned_at: string | null;
+  activated_at: string | null;
+  notes: string | null;
+};
+
+type AvailablePhysicalCode = {
+  id: string;
+  code: string;
+  product_type: string;
+  status: string;
+  batch_name: string | null;
 };
 
 const ORDER_STATUS_OPTIONS = [
@@ -143,6 +177,8 @@ const NOTICE_LABELS: Record<string, string> = {
   payment_verified: "Pago verificado: Mercado Pago lo reporta como aprobado.",
   payment_checked: "Pago verificado con Mercado Pago. Revisa el estado actualizado en la tarjeta del pedido.",
   payment_not_found: "No encontramos pagos asociados todavía en Mercado Pago para esa orden.",
+  product_assigned: "Código físico asignado al pedido y correo de activación enviado si aplica.",
+  product_released: "Código físico liberado y disponible nuevamente para otra orden.",
 };
 
 export default async function AdminOrdersPage({ searchParams }: PageProps) {
@@ -196,6 +232,8 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
       admin_notes,
       archived_at,
       archived_reason,
+      product_assigned_at,
+      product_assigned_notified_at,
       pets (
         id,
         name,
@@ -241,8 +279,40 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
       .limit(1000),
   ]);
 
-  const orderRows = ((orders || []) as OrderRow[]) || [];
-  const stats = buildStats((statsRows || []) as Array<Record<string, unknown>>);
+  const baseOrderRows = ((orders || []) as unknown as OrderRow[]) || [];
+  const orderIds = baseOrderRows.map((order) => order.id);
+
+  const [{ data: assignedCodeRows }, { data: availableCodeRows }] = await Promise.all([
+    orderIds.length > 0
+      ? admin
+          .from("ramx_order_product_codes")
+          .select("id, order_id, code_id, code, product_type, status, assigned_at, activated_at, notes")
+          .in("order_id", orderIds)
+          .in("status", ["assigned", "activated", "blocked"])
+          .order("assigned_at", { ascending: false })
+      : Promise.resolve({ data: [] as OrderAssignedCode[] }),
+    admin
+      .from("ramx_physical_codes")
+      .select("id, code, product_type, status, batch_name")
+      .eq("status", "available")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(250),
+  ]);
+
+  const codesByOrder = new Map<string, OrderAssignedCode[]>();
+  for (const code of ((assignedCodeRows || []) as unknown as OrderAssignedCode[])) {
+    const list = codesByOrder.get(code.order_id) || [];
+    list.push(code);
+    codesByOrder.set(code.order_id, list);
+  }
+
+  const orderRows = baseOrderRows.map((order) => ({
+    ...order,
+    assigned_codes: codesByOrder.get(order.id) || [],
+  }));
+  const availablePhysicalCodes = ((availableCodeRows || []) as unknown as AvailablePhysicalCode[]) || [];
+  const stats = buildStats((statsRows || []) as unknown as StatsRow[]);
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#fff7ed_0%,#eff6ff_45%,#f8fafc_100%)] px-4 py-8 sm:px-6 sm:py-10">
@@ -417,6 +487,9 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
             const isArchived = Boolean(order.archived_at);
             const summary = buildOrderSummary(order);
             const itemsLabel = getItemsLabel(order);
+            const pet = getOrderPet(order);
+            const assignedCodes = order.assigned_codes || [];
+            const canAssignPhysicalProduct = orderRequiresPhysicalCode(order);
 
             return (
               <article
@@ -437,16 +510,16 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                     </h2>
                     <p className="mt-1 text-sm text-neutral-600">
                       Mascota: {" "}
-                      {order.pets?.public_slug ? (
+                      {pet?.public_slug ? (
                         <Link
-                          href={`/p/${order.pets.public_slug}`}
+                          href={`/p/${pet.public_slug}`}
                           target="_blank"
                           className="font-medium text-sky-700 hover:underline"
                         >
-                          {order.pets.name || "Ver perfil"}
+                          {pet.name || "Ver perfil"}
                         </Link>
                       ) : (
-                        order.pets?.name || extractPetFromNotes(order.notes) || "Sin mascota vinculada"
+                        pet?.name || extractPetFromNotes(order.notes) || "Sin mascota vinculada"
                       )}
                     </p>
                     <p className="mt-1 text-xs text-neutral-500">
@@ -529,6 +602,15 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
                       <NoteBox label="Motivo de archivo" value={order.archived_reason} tone="neutral" />
                     ) : null}
                   </div>
+                ) : null}
+
+                {canAssignPhysicalProduct ? (
+                  <ProductAssignmentBox
+                    order={order}
+                    assignedCodes={assignedCodes}
+                    availableCodes={availablePhysicalCodes}
+                    returnTo={returnTo}
+                  />
                 ) : null}
 
                 <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_auto]">
@@ -713,6 +795,132 @@ export default async function AdminOrdersPage({ searchParams }: PageProps) {
   );
 }
 
+
+function ProductAssignmentBox({
+  order,
+  assignedCodes,
+  availableCodes,
+  returnTo,
+}: {
+  order: OrderRow;
+  assignedCodes: OrderAssignedCode[];
+  availableCodes: AvailablePhysicalCode[];
+  returnTo: string;
+}) {
+  return (
+    <section className="mt-4 rounded-[24px] border border-sky-100 bg-sky-50/80 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-600">
+            Activación de producto físico
+          </p>
+          <h3 className="mt-1 text-base font-semibold text-sky-950">
+            QR/NFC asociado a la orden
+          </h3>
+          <p className="mt-1 text-xs leading-5 text-sky-800/80">
+            Asigna el código que irá impreso o grabado en la placa. El cliente lo podrá activar desde /r/[código] cuando reciba el producto.
+          </p>
+        </div>
+        <Link
+          href="/admin/products/codes"
+          className="rounded-2xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-800 transition hover:-translate-y-0.5 hover:shadow-sm"
+        >
+          Inventario de códigos
+        </Link>
+      </div>
+
+      {assignedCodes.length > 0 ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {assignedCodes.map((item) => (
+            <div key={item.id} className="rounded-2xl border border-white bg-white/90 p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-mono text-sm font-bold text-neutral-950">{item.code}</p>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {productCodeLabel(item.product_type)} · {productCodeStatusLabel(item.status)}
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-400">
+                    Asignado: {formatDate(item.assigned_at)}
+                  </p>
+                </div>
+                <a
+                  href={`/r/${encodeURIComponent(item.code)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-neutral-200 px-3 py-1 text-xs font-semibold text-neutral-700 transition hover:border-neutral-950 hover:text-neutral-950"
+                >
+                  Abrir QR
+                </a>
+              </div>
+
+              {item.status !== "activated" ? (
+                <form action={releaseRamxPhysicalCodeFromOrderAction} className="mt-3">
+                  <input type="hidden" name="assignment_id" value={item.id} />
+                  <input type="hidden" name="return_to" value={returnTo} />
+                  <button
+                    type="submit"
+                    className="rounded-2xl border border-neutral-300 bg-white px-3 py-2 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-50"
+                  >
+                    Liberar código
+                  </button>
+                </form>
+              ) : (
+                <p className="mt-3 rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                  Activado por el cliente. Ya no se puede liberar desde aquí.
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <form action={assignRamxPhysicalCodeToOrderAction} className="mt-4 grid gap-3 md:grid-cols-[1.2fr_1fr_auto]">
+        <input type="hidden" name="order_id" value={order.id} />
+        <input type="hidden" name="return_to" value={returnTo} />
+        <label className="space-y-1">
+          <span className="text-xs font-medium text-sky-900">Código disponible</span>
+          <select
+            name="code_id"
+            className="h-11 w-full rounded-2xl border border-sky-200 bg-white px-3 text-sm outline-none focus:border-sky-700"
+            defaultValue=""
+            required
+          >
+            <option value="">Seleccionar código</option>
+            {availableCodes.map((code) => (
+              <option key={code.id} value={code.id}>
+                {code.code} · {productCodeLabel(code.product_type)}{code.batch_name ? ` · ${code.batch_name}` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs font-medium text-sky-900">Nota opcional</span>
+          <input
+            name="assignment_notes"
+            placeholder="Ej. Placa negra lote 1"
+            className="h-11 w-full rounded-2xl border border-sky-200 bg-white px-3 text-sm outline-none focus:border-sky-700"
+          />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="submit"
+            className="h-11 rounded-2xl bg-sky-700 px-4 text-sm font-semibold text-white transition hover:bg-sky-800 disabled:opacity-50"
+            disabled={availableCodes.length === 0}
+          >
+            Asignar código
+          </button>
+        </div>
+      </form>
+
+      {availableCodes.length === 0 ? (
+        <p className="mt-3 text-xs font-medium text-sky-800">
+          No hay códigos disponibles. Genera un lote en Admin → Códigos físicos.
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-neutral-200 bg-neutral-50/80 p-4">
@@ -835,7 +1043,7 @@ function getTimelineSteps(order: OrderRow) {
   const paidAt =
     order.mercado_pago_payment_updated_at ||
     (order.payment_status === "paid" ? order.updated_at : null);
-  const productAssigned = Boolean(order.tracking_number) || ["ready", "delivered", "returned"].includes(order.status);
+  const productAssigned = Boolean(order.product_assigned_at) || Boolean(order.assigned_codes?.length) || Boolean(order.tracking_number) || ["ready", "delivered", "returned"].includes(order.status);
   const shippedOrDelivered = Boolean(order.tracking_number) || ["delivered", "returned"].includes(order.status);
 
   return [
@@ -860,7 +1068,7 @@ function getTimelineSteps(order: OrderRow) {
     {
       label: "Producto asignado",
       done: productAssigned,
-      date: productAssigned ? formatDate(order.updated_at) : null,
+      date: order.product_assigned_at ? formatDate(order.product_assigned_at) : productAssigned ? formatDate(order.updated_at) : null,
       help: "Asignar placa/código físico al pedido.",
     },
     {
@@ -913,6 +1121,56 @@ function whatsappHref(phone: string, orderNumber: string) {
   );
 
   return `https://wa.me/${normalized}?text=${message}`;
+}
+
+
+function orderRequiresPhysicalCode(order: OrderRow) {
+  return (order.ramx_order_items || []).some((item) => item.product_type !== "donacion_ramx");
+}
+
+function productCodeLabel(value: string) {
+  const labels: Record<string, string> = {
+    qr_plate: "Placa QR",
+    qr_nfc_plate: "Placa QR + NFC",
+    nfc_card: "Tarjeta NFC",
+    kit: "Kit RAMX",
+    other: "Producto RAMX",
+    placa_inteligente_nfc_qr: "Placa Inteligente NFC/Qr",
+    combo_identificacion_inteligente: "Combo Identificación",
+    combo_identidad_inteligente: "Combo Identidad",
+  };
+  return labels[value] || value || "Producto RAMX";
+}
+
+function productCodeStatusLabel(value: string) {
+  const labels: Record<string, string> = {
+    available: "Disponible",
+    reserved: "Reservado",
+    assigned: "Asignado",
+    activated: "Activado",
+    blocked: "Bloqueado",
+    disabled: "Desactivado",
+    replaced: "Reemplazado",
+    released: "Liberado",
+  };
+  return labels[value] || value || "—";
+}
+
+function getItemsLabel(order: OrderRow) {
+  const items = order.ramx_order_items || [];
+  const label = items
+    .map((item) => `${item.quantity || 1} × ${item.product_name || item.product_type}`)
+    .join(", ");
+
+  return label || "Producto RAMX";
+}
+
+function getOrderPet(order: OrderRow) {
+  if (Array.isArray(order.pets)) {
+    return order.pets[0] || null;
+  }
+
+  return order.pets || null;
 }
 
 function trackingLabel(order: OrderRow) {
@@ -984,7 +1242,7 @@ function buildOrderSummary(order: OrderRow) {
     `Dirección: ${order.shipping_address || "Sin dirección"}`,
     `Guía: ${trackingLabel(order)}`,
     `Rastreo: ${order.tracking_url || "Sin link"}`,
-    `Mascota: ${order.pets?.name || extractPetFromNotes(order.notes) || "Sin mascota vinculada"}`,
+    `Mascota: ${getOrderPet(order)?.name || extractPetFromNotes(order.notes) || "Sin mascota vinculada"}`,
     `Mercado Pago: ${mercadoPagoSummary(order).replaceAll("\n", " · ")}`,
     `Notas cliente: ${order.notes || "Sin notas"}`,
     `Notas admin: ${order.admin_notes || "Sin notas"}`,
@@ -997,7 +1255,22 @@ function extractPetFromNotes(notes: string | null) {
   return match?.[1]?.trim() || null;
 }
 
-function buildStats(rows: Array<Record<string, unknown>>) {
+type StatsRow = {
+  status?: string | null;
+  payment_status?: string | null;
+  archived_at?: string | null;
+  total_amount?: number | string | null;
+};
+
+type OrderStats = {
+  active: number;
+  paid: number;
+  pending: number;
+  inProduction: number;
+  revenue: number;
+};
+
+function buildStats(rows: StatsRow[]): OrderStats {
   return rows.reduce(
     (acc, row) => {
       const archived = Boolean(row.archived_at);

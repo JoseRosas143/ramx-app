@@ -11,9 +11,12 @@ const PRODUCT_TYPES = [
   'nfc_card',
   'kit',
   'other',
+  'placa_inteligente_nfc_qr',
+  'combo_identificacion_inteligente',
+  'combo_identidad_inteligente',
 ] as const
 
-const STATUSES = ['available', 'reserved', 'activated', 'disabled'] as const
+const STATUSES = ['available', 'reserved', 'assigned', 'activated', 'blocked', 'disabled', 'replaced'] as const
 
 type ProductType = (typeof PRODUCT_TYPES)[number]
 type Status = (typeof STATUSES)[number]
@@ -84,12 +87,19 @@ export async function updatePhysicalCodeStatusAction(formData: FormData) {
     status: nextStatus,
   }
 
-  if (nextStatus === 'disabled') {
-    payload.disabled_at = new Date().toISOString()
+  if (nextStatus === 'disabled' || nextStatus === 'blocked') {
+    payload.disabled_at = nextStatus === 'disabled' ? new Date().toISOString() : null
+    payload.blocked_at = nextStatus === 'blocked' ? new Date().toISOString() : null
   }
 
   if (nextStatus === 'available') {
     payload.disabled_at = null
+    payload.blocked_at = null
+    payload.blocked_reason = null
+    payload.assigned_order_id = null
+    payload.assigned_order_item_id = null
+    payload.assigned_profile_id = null
+    payload.assigned_at = null
   }
 
   const { error } = await admin
@@ -187,6 +197,9 @@ function createPhysicalCode(prefix: string, productType: ProductType) {
     nfc_card: 'NFC',
     kit: 'KIT',
     other: 'GEN',
+    placa_inteligente_nfc_qr: 'PLQ',
+    combo_identificacion_inteligente: 'CID',
+    combo_identidad_inteligente: 'CII',
   }
 
   return `${normalizePrefix(prefix)}-${productPrefix[productType]}-${randomSuffix()}`
