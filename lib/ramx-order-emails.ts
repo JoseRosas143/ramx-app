@@ -106,6 +106,59 @@ export async function sendRamxOrderEmails(input: OrderEmailInput) {
   return { sent: true as const };
 }
 
+
+
+type PaymentConfirmedEmailInput = {
+  orderNumber: string;
+  orderKind?: RamxStoreProductKind;
+  productName: string;
+  totalAmount: number;
+  customerName: string;
+  customerEmail: string;
+  paymentId?: string | null;
+  paymentStatus?: string | null;
+  paymentStatusDetail?: string | null;
+  paidAt?: string | null;
+};
+
+export async function sendRamxPaymentConfirmedEmails(
+  input: PaymentConfirmedEmailInput,
+) {
+  const transporter = getTransporter();
+  const from = getFromHeader();
+
+  if (!transporter || !from) {
+    console.warn("SMTP no configurado. Se omiten correos de pago RAMX.");
+    return { sent: false, reason: "smtp-not-configured" as const };
+  }
+
+  const adminEmail =
+    process.env.RAMX_ORDERS_NOTIFICATION_EMAIL || DEFAULT_ADMIN_EMAIL;
+  const isDonation = input.orderKind === "donation";
+
+  await Promise.all([
+    transporter.sendMail({
+      from,
+      to: input.customerEmail,
+      subject: isDonation
+        ? `RAMX · Donación confirmada ${input.orderNumber}`
+        : `RAMX · Pago confirmado ${input.orderNumber}`,
+      html: buildPaymentConfirmedCustomerHtml(input),
+      text: buildPaymentConfirmedCustomerText(input),
+    }),
+    transporter.sendMail({
+      from,
+      to: adminEmail,
+      subject: `RAMX · Pedido pagado ${input.orderNumber} · ${input.productName}`,
+      html: buildPaymentConfirmedAdminHtml(input),
+      text: buildPaymentConfirmedAdminText(input),
+      replyTo: input.customerEmail,
+    }),
+  ]);
+
+  return { sent: true as const };
+}
+
 function buildCustomerHtml(input: OrderEmailInput) {
   const isDonation = input.orderKind === "donation";
 
@@ -259,6 +312,95 @@ function baseEmailShell({
   `;
 }
 
+
+
+function buildPaymentConfirmedCustomerHtml(input: PaymentConfirmedEmailInput) {
+  const isDonation = input.orderKind === "donation";
+
+  return baseEmailShell({
+    eyebrow: isDonation ? "RAMX · Donación confirmada" : "RAMX · Pago confirmado",
+    title: isDonation
+      ? `Gracias por impulsar RAMX, ${input.customerName}`
+      : `Pago recibido, ${input.customerName}`,
+    intro: isDonation
+      ? "Mercado Pago confirmó tu aportación. Gracias por ayudar a que RAMX pueda llegar a más familias y mascotas."
+      : "Mercado Pago confirmó tu preventa. Tu pedido ya quedó asegurado y el equipo RAMX continuará con preparación, asignación y entrega.",
+    body: `
+      ${summaryTable([
+        ["Número de pedido", input.orderNumber],
+        ["Concepto", input.productName],
+        ["Total pagado", formatMxn(input.totalAmount)],
+        ["Pago Mercado Pago", input.paymentId || "Confirmado"],
+        ["Estado", input.paymentStatus || "approved"],
+        ["Detalle", input.paymentStatusDetail || "Pago aprobado"],
+        ["Fecha", input.paidAt ? formatEmailDate(input.paidAt) : "Confirmado por Mercado Pago"],
+      ])}
+
+      <p style="margin:22px 0 0;color:#4b5563;font-size:14px;line-height:1.7;text-align:center;">
+        ${
+          isDonation
+            ? "Tu apoyo forma parte del lanzamiento fundador de RAMX. Gracias por creer en una identidad digital más segura para las mascotas."
+            : "Te avisaremos cuando tu pedido avance a preparación, asignación de producto o entrega. Gracias por formar parte de la preventa fundadora de RAMX."
+        }
+      </p>
+    `,
+  });
+}
+
+function buildPaymentConfirmedAdminHtml(input: PaymentConfirmedEmailInput) {
+  const isDonation = input.orderKind === "donation";
+
+  return baseEmailShell({
+    eyebrow: "RAMX · Pago recibido",
+    title: `Pedido pagado ${input.orderNumber}`,
+    intro: isDonation
+      ? "Mercado Pago confirmó una donación. No requiere producción física, salvo que el equipo RAMX decida dar seguimiento manual."
+      : "Mercado Pago confirmó el pago de una orden. El pedido ya puede pasar a preparación operativa.",
+    body: `
+      ${summaryTable([
+        ["Número de pedido", input.orderNumber],
+        ["Producto", input.productName],
+        ["Total pagado", formatMxn(input.totalAmount)],
+        ["Cliente", input.customerName],
+        ["Correo", input.customerEmail],
+        ["ID de pago", input.paymentId || "No disponible"],
+        ["Estado MP", input.paymentStatus || "approved"],
+        ["Detalle MP", input.paymentStatusDetail || "Pago aprobado"],
+        ["Fecha", input.paidAt ? formatEmailDate(input.paidAt) : "Confirmado por Mercado Pago"],
+      ])}
+    `,
+  });
+}
+
+function buildPaymentConfirmedCustomerText(input: PaymentConfirmedEmailInput) {
+  return [
+    `RAMX · Pago confirmado`,
+    `Pedido: ${input.orderNumber}`,
+    `Concepto: ${input.productName}`,
+    `Total pagado: ${formatMxn(input.totalAmount)}`,
+    input.paymentId ? `Pago Mercado Pago: ${input.paymentId}` : null,
+    `Gracias por formar parte de RAMX.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildPaymentConfirmedAdminText(input: PaymentConfirmedEmailInput) {
+  return [
+    `RAMX · Pedido pagado`,
+    `Pedido: ${input.orderNumber}`,
+    `Producto: ${input.productName}`,
+    `Total: ${formatMxn(input.totalAmount)}`,
+    `Cliente: ${input.customerName}`,
+    `Correo: ${input.customerEmail}`,
+    input.paymentId ? `Pago Mercado Pago: ${input.paymentId}` : null,
+    input.paymentStatus ? `Estado MP: ${input.paymentStatus}` : null,
+    input.paymentStatusDetail ? `Detalle MP: ${input.paymentStatusDetail}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function paymentButton(paymentUrl: string, isDonation = false) {
   return `
     <div style="margin:26px 0 0;text-align:center;">
@@ -391,4 +533,16 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+
+function formatEmailDate(value: string) {
+  try {
+    return new Intl.DateTimeFormat("es-MX", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return value;
+  }
 }

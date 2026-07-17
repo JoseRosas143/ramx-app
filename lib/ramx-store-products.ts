@@ -1,13 +1,7 @@
-export type RamxStoreProductType =
-  | "placa_inteligente_nfc_qr"
-  | "combo_identificacion_inteligente"
-  | "combo_identidad_inteligente"
-  | "donacion_ramx";
-
 export type RamxStoreProductKind = "physical" | "donation";
 
 export type RamxStoreProduct = {
-  type: RamxStoreProductType;
+  type: string;
   kind: RamxStoreProductKind;
   title: string;
   shortTitle: string;
@@ -16,9 +10,13 @@ export type RamxStoreProduct = {
   description: string;
   imageSrc: string;
   includes: string[];
+  isActive?: boolean;
+  sortOrder?: number;
+  badgeText?: string | null;
+  ctaLabel?: string | null;
 };
 
-export const RAMX_STORE_PRODUCTS: RamxStoreProduct[] = [
+export const RAMX_DEFAULT_STORE_PRODUCTS: RamxStoreProduct[] = [
   {
     type: "placa_inteligente_nfc_qr",
     kind: "physical",
@@ -36,6 +34,10 @@ export const RAMX_STORE_PRODUCTS: RamxStoreProduct[] = [
       "Activación RAMX",
       "Perfil público",
     ],
+    isActive: true,
+    sortOrder: 10,
+    badgeText: "Preventa",
+    ctaLabel: "Comprar en preventa",
   },
   {
     type: "combo_identificacion_inteligente",
@@ -54,6 +56,10 @@ export const RAMX_STORE_PRODUCTS: RamxStoreProduct[] = [
       "Activación RAMX",
       "Perfil público",
     ],
+    isActive: true,
+    sortOrder: 20,
+    badgeText: "Más elegido",
+    ctaLabel: "Apartar combo",
   },
   {
     type: "combo_identidad_inteligente",
@@ -67,6 +73,10 @@ export const RAMX_STORE_PRODUCTS: RamxStoreProduct[] = [
     imageSrc:
       "https://esxkbfyphnthqcxfpkte.supabase.co/storage/v1/object/public/Productos/Combo%20Identidad%20Inteligente%202.png",
     includes: ["Placa NFC/Qr", "Microchip", "Pasaporte", "Certificado"],
+    isActive: true,
+    sortOrder: 30,
+    badgeText: "Completo",
+    ctaLabel: "Comprar paquete",
   },
   {
     type: "donacion_ramx",
@@ -84,8 +94,17 @@ export const RAMX_STORE_PRODUCTS: RamxStoreProduct[] = [
       "Apoyo a la red RAMX",
       "Sin envío",
     ],
+    isActive: true,
+    sortOrder: 40,
+    badgeText: "Apoyo voluntario",
+    ctaLabel: "Donar",
   },
 ];
+
+// Alias de compatibilidad para módulos anteriores. La tienda y el checkout nuevos
+// leen Supabase vía lib/ramx-store-config.ts; esta lista queda como respaldo si
+// la tabla editable todavía no existe.
+export const RAMX_STORE_PRODUCTS = RAMX_DEFAULT_STORE_PRODUCTS;
 
 export const RAMX_STORE_PRODUCT_TYPES = RAMX_STORE_PRODUCTS.map(
   (product) => product.type,
@@ -93,7 +112,7 @@ export const RAMX_STORE_PRODUCT_TYPES = RAMX_STORE_PRODUCTS.map(
 
 export const RAMX_STORE_PRODUCT_BY_TYPE = Object.fromEntries(
   RAMX_STORE_PRODUCTS.map((product) => [product.type, product]),
-) as Record<RamxStoreProductType, RamxStoreProduct>;
+) as Record<string, RamxStoreProduct>;
 
 export function getRamxStoreProduct(type: string | null) {
   if (!type) return null;

@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  getMercadoPagoPayment,
-  mapMercadoPagoPaymentStatus,
-} from "@/lib/ramx-mercado-pago";
+import { syncRamxMercadoPagoByPaymentId } from "@/lib/ramx-payment-sync";
 
 export async function GET() {
   return NextResponse.json({ ok: true, service: "ramx-mercado-pago-webhook" });
@@ -18,8 +14,10 @@ export async function POST(request: NextRequest) {
     url.searchParams.get("topic") ||
     readString(body?.type) ||
     readString(body?.topic) ||
+    readString(body?.resource_type) ||
     "";
 
+  const action = readString(body?.action) || "";
   const paymentId =
     url.searchParams.get("data.id") ||
     url.searchParams.get("id") ||
@@ -27,7 +25,7 @@ export async function POST(request: NextRequest) {
     readString(body?.id);
 
   if (topic && !["payment", "payments"].includes(topic)) {
-    return NextResponse.json({ ok: true, ignored: topic });
+    return NextResponse.json({ ok: true, ignored: topic, action });
   }
 
   if (!paymentId) {
@@ -38,52 +36,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const payment = await getMercadoPagoPayment(paymentId);
-
-    if (!payment.externalReference) {
-      return NextResponse.json({
-        ok: true,
-        ignored: "missing_external_reference",
-      });
-    }
-
-    const admin = createAdminClient();
-    const paymentStatus = mapMercadoPagoPaymentStatus(payment.status);
-    const now = new Date().toISOString();
-
-    const payload: Record<string, unknown> = {
-      payment_status: paymentStatus,
-      payment_provider: "mercado_pago",
-      mercado_pago_payment_id: payment.paymentId,
-      mercado_pago_payment_status: payment.status,
-      mercado_pago_payment_status_detail: payment.statusDetail,
-      mercado_pago_payment_updated_at: now,
-      updated_at: now,
-    };
-
-    if (paymentStatus === "paid") {
-      payload.status = "confirmed";
-      payload.confirmed_at = now;
-    }
-
-    if (paymentStatus === "cancelled") {
-      payload.cancelled_at = now;
-    }
-
-    const { error } = await admin
-      .from("ramx_orders")
-      .update(payload)
-      .eq("order_number", payment.externalReference);
-
-    if (error) {
-      throw error;
-    }
+    const result = await syncRamxMercadoPagoByPaymentId(paymentId, "webhook");
 
     return NextResponse.json({
       ok: true,
-      order: payment.externalReference,
-      payment_status: paymentStatus,
-      mercado_pago_status: payment.status,
+      action,
+      ...result,
     });
   } catch (error) {
     console.error("RAMX Mercado Pago webhook error:", error);

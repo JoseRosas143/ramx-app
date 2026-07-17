@@ -3,11 +3,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  getRamxStoreProduct,
-  RAMX_STORE_PRODUCT_TYPES,
-  type RamxStoreProductType,
-} from "@/lib/ramx-store-products";
+import { getRamxActiveStoreProduct } from "@/lib/ramx-store-config";
 import { sendRamxOrderEmails } from "@/lib/ramx-order-emails";
 import {
   createRamxMercadoPagoPreference,
@@ -33,17 +29,14 @@ export async function createPhysicalProductOrderAction(formData: FormData) {
   const shippingAddress = buildShippingAddress(formData);
   const notes = cleanText(formData.get("notes"));
 
-  if (
-    !productType ||
-    !RAMX_STORE_PRODUCT_TYPES.includes(productType as RamxStoreProductType)
-  ) {
-redirectToOrderError("invalid_product", productType);
+  if (!productType) {
+        redirectToOrderError("invalid_product", productType);
   }
 
-  const product = getRamxStoreProduct(productType);
+  const product = await getRamxActiveStoreProduct(productType);
 
   if (!product) {
-redirectToOrderError("invalid_product", productType);
+        redirectToOrderError("invalid_product", productType);
   }
 
   const isDonation = product.kind === "donation";

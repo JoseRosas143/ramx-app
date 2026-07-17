@@ -64,7 +64,7 @@ export function ProductLaunchCarousel({ products }: ProductLaunchCarouselProps) 
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-100 backdrop-blur">
-                    Preventa RAMX
+                    {activeProduct.badgeText || 'Preventa RAMX'}
                   </p>
                   <h2 className="mt-4 max-w-sm text-3xl font-semibold tracking-[-0.05em] sm:text-4xl">
                     {activeProduct.title}
@@ -155,8 +155,8 @@ export function ProductLaunchCarousel({ products }: ProductLaunchCarouselProps) 
                   className="mt-5 inline-flex w-full items-center justify-center rounded-2xl bg-white px-5 py-3 text-sm font-bold text-neutral-950 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:bg-orange-50"
                 >
                   {activeProduct.kind === 'donation'
-                    ? 'Apoyar el lanzamiento'
-                    : 'Apartar en preventa'}
+                    ? activeProduct.ctaLabel || 'Apoyar el lanzamiento'
+                    : activeProduct.ctaLabel || 'Apartar en preventa'}
                 </Link>
               </div>
             </div>
@@ -211,7 +211,9 @@ export function ProductLaunchCarousel({ products }: ProductLaunchCarouselProps) 
                 href={`/tienda/order?product=${activeProduct.type}`}
                 className="inline-flex items-center justify-center rounded-2xl bg-neutral-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
               >
-                {activeProduct.kind === 'donation' ? 'Donar' : 'Apartar'}
+                {activeProduct.kind === 'donation'
+                  ? activeProduct.ctaLabel || 'Donar'
+                  : activeProduct.ctaLabel || 'Apartar'}
               </Link>
             </div>
           </div>

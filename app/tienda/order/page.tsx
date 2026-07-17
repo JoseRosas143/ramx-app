@@ -2,7 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { RAMX_STORE_PRODUCTS, formatMxn } from "@/lib/ramx-store-products";
+import { formatMxn } from "@/lib/ramx-store-products";
+import { getRamxActiveStoreProducts } from "@/lib/ramx-store-config";
 import { isMercadoPagoConfigured } from "@/lib/ramx-mercado-pago";
 import { createPhysicalProductOrderAction } from "./actions";
 
@@ -18,11 +19,13 @@ export default async function PhysicalProductOrderPage({
 }: PageProps) {
   const query = searchParams ? await searchParams : {};
 
-  const selectedProduct = RAMX_STORE_PRODUCTS.some(
+  const storeProducts = await getRamxActiveStoreProducts();
+
+  const selectedProduct = storeProducts.some(
     (item) => item.type === query.product,
   )
     ? query.product
-    : RAMX_STORE_PRODUCTS[0].type;
+    : storeProducts[0]?.type;
 
   const errorMessage = getOrderErrorMessage(query.error);
 
@@ -120,7 +123,7 @@ export default async function PhysicalProductOrderPage({
             </h2>
 
             <div className="mt-5 grid gap-4">
-              {RAMX_STORE_PRODUCTS.map((product) => (
+              {storeProducts.map((product) => (
                 <label
                   key={product.type}
                   className="block cursor-pointer rounded-[28px] border border-neutral-200 bg-neutral-50/70 p-3 transition hover:border-neutral-400 hover:bg-white sm:p-4"

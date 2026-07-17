@@ -35,9 +35,25 @@ type MercadoPagoPaymentResponse = {
   external_reference?: string;
   transaction_amount?: number;
   currency_id?: string;
+  date_created?: string;
+  date_approved?: string;
+  date_last_updated?: string;
   payer?: {
     email?: string;
   };
+  metadata?: Record<string, unknown>;
+};
+
+type MercadoPagoPaymentSearchResponse = {
+  results?: MercadoPagoPaymentResponse[];
+  paging?: {
+    total?: number;
+    limit?: number;
+    offset?: number;
+  };
+  message?: string;
+  error?: string;
+  cause?: Array<{ code?: string | number; description?: string }>;
 };
 
 export type MercadoPagoPreferenceResult = {
@@ -55,10 +71,24 @@ export type MercadoPagoPaymentResult = {
   transactionAmount: number | null;
   currencyId: string | null;
   payerEmail: string | null;
+  dateCreated: string | null;
+  dateApproved: string | null;
+  dateLastUpdated: string | null;
 };
+
+export type RamxPaymentStatus =
+  | "unpaid"
+  | "manual_pending"
+  | "paid"
+  | "refunded"
+  | "cancelled";
 
 export function isMercadoPagoConfigured() {
   return Boolean(getAccessToken());
+}
+
+export function isMercadoPagoTestMode() {
+  return getAccessToken()?.startsWith("TEST-") || false;
 }
 
 export async function createRamxMercadoPagoPreference(
@@ -109,6 +139,9 @@ export async function createRamxMercadoPagoPreference(
     metadata: {
       ramx_order_id: input.orderId,
       order_number: input.orderNumber,
+      customer_name: input.customerName,
+      customer_email: input.customerEmail,
+      customer_phone: input.customerPhone || null,
       pet_reference: input.petReference || null,
       shipping_address: input.shippingAddress || null,
       notes: input.notes || null,
@@ -178,8 +211,86 @@ export async function getMercadoPagoPayment(
     throw new Error(buildMercadoPagoError(payload, response.status));
   }
 
+  return normalizeMercadoPagoPayment(payload, paymentId);
+}
+
+export async function searchMercadoPagoPaymentsByExternalReference(
+  externalReference: string,
+): Promise<MercadoPagoPaymentResult[]> {
+  const accessToken = requireAccessToken();
+  const params = new URLSearchParams({
+    external_reference: externalReference,
+    sort: "date_created",
+    criteria: "desc",
+    limit: "20",
+  });
+
+  const response = await fetch(
+    `${MERCADO_PAGO_API_BASE}/v1/payments/search?${params.toString()}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    },
+  );
+
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as MercadoPagoPaymentSearchResponse;
+
+  if (!response.ok) {
+    throw new Error(buildMercadoPagoError(payload, response.status));
+  }
+
+  return (payload.results || [])
+    .filter((payment) => payment.id)
+    .map((payment) => normalizeMercadoPagoPayment(payment));
+}
+
+export function chooseBestMercadoPagoPayment(
+  payments: MercadoPagoPaymentResult[],
+) {
+  if (payments.length === 0) return null;
+
+  return (
+    payments.find((payment) => payment.status === "approved") ||
+    payments.find((payment) => ["pending", "in_process", "authorized"].includes(payment.status)) ||
+    payments[0]
+  );
+}
+
+export function mapMercadoPagoPaymentStatus(status: string): RamxPaymentStatus {
+  const normalized = status.toLowerCase();
+
+  if (normalized === "approved") return "paid";
+  if (normalized === "refunded" || normalized === "charged_back") return "refunded";
+  if (normalized === "cancelled" || normalized === "rejected") return "cancelled";
+
+  return "manual_pending";
+}
+
+export function mercadoPagoStatusLabel(status: string | null | undefined) {
+  const normalized = String(status || "").toLowerCase();
+
+  if (normalized === "approved") return "Pago aprobado";
+  if (normalized === "pending") return "Pago pendiente";
+  if (normalized === "in_process") return "Pago en revisión";
+  if (normalized === "authorized") return "Pago autorizado";
+  if (normalized === "rejected") return "Pago rechazado";
+  if (normalized === "cancelled") return "Pago cancelado";
+  if (normalized === "refunded") return "Pago devuelto";
+  if (normalized === "charged_back") return "Contracargo";
+
+  return normalized ? `Mercado Pago: ${normalized}` : "Sin validación de Mercado Pago";
+}
+
+function normalizeMercadoPagoPayment(
+  payload: MercadoPagoPaymentResponse,
+  fallbackPaymentId?: string,
+): MercadoPagoPaymentResult {
   return {
-    paymentId: String(payload.id || paymentId),
+    paymentId: String(payload.id || fallbackPaymentId || ""),
     status: payload.status || "unknown",
     statusDetail: payload.status_detail || null,
     externalReference: payload.external_reference || null,
@@ -189,21 +300,11 @@ export async function getMercadoPagoPayment(
         : null,
     currencyId: payload.currency_id || null,
     payerEmail: payload.payer?.email || null,
+    dateCreated: payload.date_created || null,
+    dateApproved: payload.date_approved || null,
+    dateLastUpdated: payload.date_last_updated || null,
   };
 }
-
-export function mapMercadoPagoPaymentStatus(status: string) {
-  const normalized = status.toLowerCase();
-
-  if (normalized === "approved") return "paid";
-  if (normalized === "refunded" || normalized === "charged_back")
-    return "refunded";
-  if (normalized === "cancelled" || normalized === "rejected")
-    return "cancelled";
-
-  return "manual_pending";
-}
-
 
 function normalizeMercadoPagoAmount(value: number) {
   if (!Number.isFinite(value) || value <= 0) return null;
